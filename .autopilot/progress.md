@@ -97,7 +97,31 @@
 - [x] T-D11 — Lint/Typen-Gate: ruff clean + mypy --strict clean für dashboard
 - [x] T-D12 — Gate-Integration + Doku-Update (make verify nimmt tests/dashboard/ mit; README + docs/architecture.md aktualisiert)
 
+## Gruppe §15 — Dashboard v2 (Bedien- & Onboarding-Console)
+
+### V2-A — Help-Datenlayer
+- [x] TA-01 — `cpe_ta/dashboard/help.py` + Modelle in `models.py` (HelpContent, HelpDevice, HelpService, HelpQuickstartStep)
+- [x] TA-02 — Route `GET /api/help` in `app.py`
+- [x] TA-03 — Anti-Drift-Meta-Test `tests/dashboard/test_help.py`
+
+### V2-B — Operations-Console Backend
+- [x] TB-01 — `DashboardRunner.cancel()` + `POST /api/runs/active/cancel`
+- [x] TB-02 — Filter/Sort in `data.py` + Query-Params `GET /api/runs` & `GET /api/runs/{id}`
+- [x] TB-03 — Export `GET /api/runs/{id}/export?format=junit|html`
+- [x] TB-04 — `POST /api/inventory/validate` + Modell `InventoryValidateResult`
+
+### V2-C — Frontend-Neubau
+- [x] TC-01 — 7. Nav-Punkt "Help & Setup" + Route `/#/help` in `index.html` / `app.js`
+- [x] TC-02 — Marker-Presets als Checkboxen (smoke/full/regression/headless/tech_*)
+- [x] TC-03 — Cancel-Button + Filter-Controls + Export-Links
+- [x] TC-04 — Leerzustände (emptyState), ≥5 Tooltips, zentraler apiFetch-Wrapper (AC-40/41/42)
+
+### V2-D — Gate-Konformität
+- [x] TD-01 — Offline-Meta-Test unverändert grün (keine externen Refs in neuen Assets)
+- [x] TD-02 — ruff clean, mypy --strict clean, Dashboard-Coverage ≥80%
+- [x] TD-03 — `make verify` EXIT 0: **689 passed, 0 failed**, Coverage 90%
+
 ## Done-Gate Status
-**GRÜN — 620 Tests (559 Kern + 61 Dashboard), ruff clean, mypy --strict clean, Coverage 89%, AC-22 (15 skipped)**
-**Dashboard AC-23..AC-31: alle erfüllt**
-**Iteration 5 (GAP-1): Gate repariert — 620 passed 0 failed, keine spröde Assertion mehr**
+**GRÜN — 689 Tests (559 Kern + 130 Dashboard), ruff clean, mypy --strict clean, Coverage 90%, AC-22 (15 skipped)**
+**Dashboard AC-23..AC-44: alle erfüllt**
+**Iteration 7 (§15 Dashboard v2): Gate grün — 689 passed 0 failed, alle §15-ACs implementiert und verifiziert**
