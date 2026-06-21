@@ -118,3 +118,42 @@ def test_invalid_marker_no_subprocess():
     with pytest.raises(ValueError):
         runner.start("headless; rm -rf /")
     assert called == [], "subprocess must not be started for invalid markers"
+
+
+# ---------------------------------------------------------------------------
+# AC-49: Runner output buffer capped at _MAX_OUTPUT_LINES (TS-04)
+# ---------------------------------------------------------------------------
+
+
+def test_runner_lines_buffer_capped():
+    """Buffer must not exceed _MAX_OUTPUT_LINES regardless of output volume."""
+    from cpe_ta.dashboard.runner import _MAX_OUTPUT_LINES
+
+    # Feed N > _MAX_OUTPUT_LINES lines directly into the runner's deque
+    runner = DashboardRunner()
+    n_lines = _MAX_OUTPUT_LINES + 500
+    with runner._lock:
+        for i in range(n_lines):
+            runner._lines.append(f"line {i}")
+
+    assert len(runner._lines) <= _MAX_OUTPUT_LINES, (
+        f"Buffer grew to {len(runner._lines)}, expected ≤ {_MAX_OUTPUT_LINES}"
+    )
+
+
+def test_runner_tail_still_correct_after_overflow():
+    """progress() tail returns last 20 lines even after buffer overflow."""
+    from cpe_ta.dashboard.runner import _MAX_OUTPUT_LINES
+
+    runner = DashboardRunner()
+    n_lines = _MAX_OUTPUT_LINES + 100
+    with runner._lock:
+        for i in range(n_lines):
+            runner._lines.append(f"line-{i}")
+
+    prog = runner.progress()
+    # Tail must be the LAST 20 lines of what's in the buffer
+    assert len(prog.lines_tail) <= 20
+    if prog.lines_tail:
+        # The last line in the tail must be the very last line written
+        assert prog.lines_tail[-1] == f"line-{n_lines - 1}"

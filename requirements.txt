@@ -13,3 +13,4 @@ types-PyYAML>=6.0
 fastapi>=0.104
 uvicorn[standard]>=0.24
 httpx>=0.25
+defusedxml>=0.7

@@ -535,13 +535,24 @@ async function viewHelp() {
        </div>`
     ).join('');
 
+    function realStatusBadge(rs) {
+      const cfg = {
+        skeleton:    {color:'#fbbf24', label:'real driver: skeleton'},
+        partial:     {color:'#fb923c', label:'real driver: partial'},
+        implemented: {color:'#4ade80', label:'real driver: implemented'},
+      };
+      const c = cfg[rs] || cfg.skeleton;
+      return `<span style="font-size:.8rem;color:${c.color}" title="Real driver implementation status">${c.label}</span>`;
+    }
+
     const hwRows = (h.hardware || []).map(d =>
       `<tr>
         <td><strong>${esc(d.name)}</strong></td>
         <td>${esc(d.purpose)}</td>
         <td style="font-size:.85rem;color:#94a3b8">${esc(d.connection)}</td>
         <td title="${d.sim_available ? 'Simulator available — no hardware needed for headless tests' : 'No simulator, requires physical hardware'}">
-          ${d.sim_available ? '<span style="color:#4ade80">✓ available</span>' : '<span style="color:#fbbf24">real only</span>'}
+          ${d.sim_available ? '<span style="color:#4ade80">✓ sim available</span>' : '<span style="color:#fbbf24">sim unavailable</span>'}
+          <br>${realStatusBadge(d.real_status)}
         </td>
        </tr>`
     ).join('') || '<tr><td colspan="4">No hardware data.</td></tr>';
@@ -551,6 +562,7 @@ async function viewHelp() {
         <div class="infra-name" title="${esc(s.note)}">${esc(s.name)}</div>
         <div class="infra-purpose">${esc(s.purpose)}</div>
         <div class="infra-note" title="Sim vs real details">${esc(s.note)}</div>
+        <div>${realStatusBadge(s.real_status)}</div>
        </div>`
     ).join('') || emptyState('No infrastructure data.', '');
 

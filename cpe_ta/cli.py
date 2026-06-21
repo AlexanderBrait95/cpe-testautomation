@@ -229,6 +229,9 @@ def db_migrate_cmd(db_path: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+_LOOPBACK_HOSTS: frozenset[str] = frozenset({"127.0.0.1", "localhost", "::1"})
+
+
 @app.command("dashboard")
 @click.option("--host", default="127.0.0.1", show_default=True, help="Bind host (default: loopback)")
 @click.option("--port", default=8080, show_default=True, help="Bind port")
@@ -246,6 +249,13 @@ def dashboard_cmd(host: str, port: int, results_path: str, db_path: str | None, 
     except ImportError as exc:
         click.echo(f"ERROR: Dashboard dependencies not installed — {exc}", err=True)
         sys.exit(1)
+
+    if host not in _LOOPBACK_HOSTS:
+        click.echo(
+            f"WARNING: binding to non-loopback host {host!r} exposes the dashboard to all "
+            "network clients — there is no authentication. Use --host 127.0.0.1 for local-only access.",
+            err=True,
+        )
 
     # Probe port availability before starting uvicorn (avoids silent hang)
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:

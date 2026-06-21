@@ -115,3 +115,41 @@ def test_overview_empty_returns_zeros():
     assert ov.total == 0
     assert ov.last_run is None
     assert ov.domains == []
+
+
+# ---------------------------------------------------------------------------
+# AC-48: XML entity-bomb / Billion Laughs resilience (TS-03)
+# ---------------------------------------------------------------------------
+
+
+def _write_billion_laughs(path: Path) -> None:
+    """Write a Billion Laughs XML entity-amplification payload to path."""
+    content = """<?xml version="1.0"?>
+<!DOCTYPE lolz [
+  <!ENTITY lol "lol">
+  <!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">
+  <!ENTITY lol3 "&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;">
+  <!ENTITY lol4 "&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;">
+  <!ENTITY lol5 "&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;">
+  <!ENTITY lol6 "&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;">
+  <!ENTITY lol7 "&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;">
+  <!ENTITY lol8 "&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;">
+  <!ENTITY lol9 "&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;">
+]>
+<testsuites>&lol9;</testsuites>"""
+    path.write_text(content)
+
+
+def test_parse_junit_billion_laughs_terminates(tmp_path):
+    """Billion Laughs payload must not expand — parse_junit must return quickly."""
+    import time
+
+    bomb = tmp_path / "billion_laughs.xml"
+    _write_billion_laughs(bomb)
+    start = time.monotonic()
+    result = parse_junit(bomb)
+    elapsed = time.monotonic() - start
+    # Must complete in well under 5 seconds (defusedxml blocks expansion instantly)
+    assert elapsed < 5.0, f"parse_junit took {elapsed:.2f}s on Billion Laughs — DoS risk"
+    # Result is empty or partial (never a crash)
+    assert isinstance(result, list)

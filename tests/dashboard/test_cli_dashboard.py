@@ -50,3 +50,55 @@ def test_port_in_use_exits_nonzero(tmp_path):
         runner = CliRunner()
         result = runner.invoke(app, ["dashboard", "--port", str(port), "--results", str(tmp_path / "missing.xml")])
     assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# AC-50: Security warning when binding to non-loopback host (TS-05)
+# ---------------------------------------------------------------------------
+
+
+def _loopback_set() -> frozenset[str]:
+    from cpe_ta.cli import _LOOPBACK_HOSTS
+    return _LOOPBACK_HOSTS
+
+
+def test_loopback_constant_covers_standard_addresses():
+    hosts = _loopback_set()
+    assert "127.0.0.1" in hosts
+    assert "localhost" in hosts
+    assert "::1" in hosts
+
+
+def test_non_loopback_host_emits_warning(tmp_path):
+    """--host 0.0.0.0 must print a security warning before starting."""
+    import unittest.mock as mock
+
+    # We mock uvicorn.run so the server doesn't actually start
+    with mock.patch("uvicorn.run"):
+        runner = CliRunner()
+        result = runner.invoke(
+            app,
+            ["dashboard", "--host", "0.0.0.0", "--port", "19999",
+             "--results", str(tmp_path / "missing.xml")],
+        )
+    output = result.output or ""
+    assert "WARNING" in output or "warning" in output.lower(), \
+        f"Expected WARNING in output for --host 0.0.0.0, got: {output[:400]}"
+    assert "0.0.0.0" in output or "non-loopback" in output, \
+        "Warning must mention the non-loopback host"
+
+
+def test_loopback_host_no_warning(tmp_path):
+    """--host 127.0.0.1 (default) must NOT emit a security warning."""
+    import unittest.mock as mock
+
+    with mock.patch("uvicorn.run"):
+        runner = CliRunner()
+        result = runner.invoke(
+            app,
+            ["dashboard", "--host", "127.0.0.1", "--port", "19998",
+             "--results", str(tmp_path / "missing.xml")],
+        )
+    output = result.output or ""
+    assert "WARNING" not in output, \
+        f"Unexpected WARNING for loopback host: {output[:400]}"

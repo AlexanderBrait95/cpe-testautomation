@@ -21,6 +21,7 @@ dependencies = [
     "fastapi>=0.104",
     "uvicorn[standard]>=0.24",
     "httpx>=0.25",
+    "defusedxml>=0.7",
 ]
 
 [project.optional-dependencies]

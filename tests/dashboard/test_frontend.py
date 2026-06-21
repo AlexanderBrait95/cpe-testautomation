@@ -163,3 +163,28 @@ def test_js_structured_error_extracted():
     # Must extract 'detail' from the backend error response
     assert "detail" in text, \
         "app.js must extract 'detail' from backend error responses (AC-42)"
+
+
+# ---------------------------------------------------------------------------
+# AC-45: real_status rendered in Help view (TP-03)
+# ---------------------------------------------------------------------------
+
+def test_js_renders_real_status():
+    text = _js_text()
+    assert "real_status" in text, \
+        "app.js must reference real_status when rendering hardware/infrastructure entries (AC-45)"
+
+
+def test_js_real_status_badge_for_skeleton():
+    text = _js_text()
+    assert "skeleton" in text, \
+        "app.js must render a 'skeleton' badge label for skeleton drivers (AC-45)"
+
+
+def test_offline_invariant_real_status_no_cdn(tmp_path):
+    """Adding real_status rendering must not introduce external refs (AC-29 unbroken)."""
+    import re as _re
+    combined = _index_text() + _js_text()
+    external = _re.findall(r'https?://[^\s\'">`]+', combined)
+    assert not external, \
+        f"External URLs found in static assets (AC-29 violation): {external[:5]}"

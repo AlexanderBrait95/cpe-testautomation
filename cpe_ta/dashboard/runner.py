@@ -7,6 +7,7 @@ import sys
 import tempfile
 import threading
 import time
+from collections import deque
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,8 @@ from cpe_ta.dashboard.models import RunProgress
 
 # Whitelist for marker expressions — no shell metacharacters allowed.
 _MARKER_RE = re.compile(r"^[a-zA-Z0-9_ ()\-andort]+$")
+
+_MAX_OUTPUT_LINES = 1000
 
 CommandFactory = Callable[[str, str], list[str]]
 
@@ -40,7 +43,7 @@ class DashboardRunner:
         self._started: float | None = None
         self._output_xml: str | None = None
         self._tmp_dir: tempfile.TemporaryDirectory[str] | None = None
-        self._lines: list[str] = []
+        self._lines: deque[str] = deque(maxlen=_MAX_OUTPUT_LINES)
         self._status: str = "idle"
         self._counts: dict[str, int] = {}
         self._thread: threading.Thread | None = None
@@ -71,7 +74,7 @@ class DashboardRunner:
             self._run_id = str(uuid.uuid4())[:8]
             self._started = time.monotonic()
             self._output_xml = xml_path
-            self._lines = []
+            self._lines = deque(maxlen=_MAX_OUTPUT_LINES)
             self._status = "running"
             self._counts = {}
             t = threading.Thread(target=self._monitor, daemon=True)
@@ -85,7 +88,7 @@ class DashboardRunner:
                 status=self._status,
                 run_id=self._run_id,
                 started=self._started,
-                lines_tail=self._lines[-20:],
+                lines_tail=list(self._lines)[-20:],
                 counts=dict(self._counts),
             )
 

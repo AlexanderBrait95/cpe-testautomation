@@ -35,6 +35,8 @@ def test_hardware_entries_count_and_fields():
         assert dev.purpose.strip()
         assert dev.connection.strip()
         assert isinstance(dev.sim_available, bool)
+        assert dev.real_status in ("implemented", "partial", "skeleton"), \
+            f"real_status must be a valid Literal, got {dev.real_status!r}"
 
 
 def test_infrastructure_keys_present():
@@ -169,3 +171,97 @@ def test_help_infra_keys_match_infra_base():
                 f"Infra protocol {proto_name!r} mapped to key {expected_key!r} "
                 f"but {expected_key!r} is missing from INFRA_SERVICE_KEYS in help.py"
             )
+
+
+# ---------------------------------------------------------------------------
+# AC-45: real_status introspection (TP-01) — anti-drift
+# ---------------------------------------------------------------------------
+
+
+def test_all_devices_have_real_status():
+    """Every hardware device must have a real_status field (AC-45, TP-01)."""
+    content = get_help_content()
+    valid = {"implemented", "partial", "skeleton"}
+    for dev in content.hardware:
+        assert dev.real_status in valid, \
+            f"Device {dev.name!r} has invalid real_status {dev.real_status!r}"
+
+
+def test_all_services_have_real_status():
+    """Every infra service must have a real_status field (AC-45, TP-01)."""
+    content = get_help_content()
+    valid = {"implemented", "partial", "skeleton"}
+    for svc in content.infrastructure:
+        assert svc.real_status in valid, \
+            f"Service {svc.key!r} has invalid real_status {svc.real_status!r}"
+
+
+def test_all_drivers_currently_skeleton():
+    """All real drivers are currently skeleton (all methods raise NotImplementedError).
+
+    Anti-drift: if a driver is implemented, this test fails — the real_status
+    must be updated to reflect the implementation (partial or implemented).
+    """
+    content = get_help_content()
+    for dev in content.hardware:
+        assert dev.real_status == "skeleton", (
+            f"Device {dev.name!r} real_status is {dev.real_status!r} — "
+            "if the driver was implemented, update the introspection mapping in help.py"
+        )
+    for svc in content.infrastructure:
+        assert svc.real_status == "skeleton", (
+            f"Service {svc.key!r} real_status is {svc.real_status!r} — "
+            "if the driver was implemented, update the introspection mapping in help.py"
+        )
+
+
+def test_real_status_api_response_includes_field():
+    """The /api/help JSON response must include real_status for each device/service."""
+    app = create_app()
+    client = TestClient(app)
+    r = client.get("/api/help")
+    assert r.status_code == 200
+    body = r.json()
+    for dev in body.get("hardware", []):
+        assert "real_status" in dev, f"real_status missing from hardware entry {dev.get('name')!r}"
+    for svc in body.get("infrastructure", []):
+        assert "real_status" in svc, f"real_status missing from infrastructure entry {svc.get('key')!r}"
+
+
+# ---------------------------------------------------------------------------
+# AC-45: Honest Quickstart — no misleading real-hardware claim (TP-02)
+# ---------------------------------------------------------------------------
+
+_BANNED_QUICKSTART_PHRASES = [
+    "the same tests execute against physical hardware",
+    "execute against physical hardware",
+]
+
+
+def test_quickstart_no_misleading_real_hw_claim():
+    """The Quickstart 'Switch to Real Hardware' step must not claim instant real-HW testing."""
+    content = get_help_content()
+    real_hw_step = next(
+        (s for s in content.quickstart if "real hardware" in s.title.lower()),
+        None,
+    )
+    assert real_hw_step is not None, "Quickstart must have a 'Switch to Real Hardware' step"
+    desc_lower = real_hw_step.description.lower()
+    for banned in _BANNED_QUICKSTART_PHRASES:
+        assert banned.lower() not in desc_lower, (
+            f"Quickstart step {real_hw_step.title!r} contains misleading claim: {banned!r}"
+        )
+
+
+def test_quickstart_real_hw_step_mentions_driver_implementation():
+    """The real-HW quickstart step must mention that driver implementation is required."""
+    content = get_help_content()
+    real_hw_step = next(
+        (s for s in content.quickstart if "real hardware" in s.title.lower()),
+        None,
+    )
+    assert real_hw_step is not None
+    desc_lower = real_hw_step.description.lower()
+    assert any(word in desc_lower for word in ("driver", "implement", "skeleton")), (
+        f"Quickstart step {real_hw_step.title!r} must mention driver implementation requirement"
+    )

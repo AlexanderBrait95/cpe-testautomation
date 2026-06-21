@@ -3,8 +3,13 @@
 All content is data-driven from the real HAL/DUT/Infra interface names.
 HAL_DEVICE_NAMES must stay in sync with cpe_ta/hal/base.py + cpe_ta/dut/base.py.
 The meta-test (test_help.py) verifies this alignment automatically.
+real_status is derived by introspecting the real driver classes (TP-01/AC-45).
 """
 from __future__ import annotations
+
+import importlib
+import inspect
+from typing import Literal
 
 from cpe_ta.dashboard.models import HelpContent, HelpDevice, HelpQuickstartStep, HelpService
 
@@ -30,94 +35,151 @@ INFRA_SERVICE_KEYS: list[str] = [
     "fileserver",
 ]
 
-_HARDWARE_DATA: list[HelpDevice] = [
-    HelpDevice(
-        name="Switch",
-        purpose="Managed switch — port enable/disable, VLAN tagging, speed/duplex, traffic mirroring",
-        connection="SNMP v2c/v3 or NETCONF; see cpe_ta/hal/drivers/snmp_switch.py",
-        sim_available=True,
+# Mapping from device name to (module, class) for real driver introspection.
+_HAL_DRIVER_MAP: dict[str, tuple[str, str]] = {
+    "Switch": ("cpe_ta.hal.drivers.snmp_switch", "SNMPSwitch"),
+    "PDU": ("cpe_ta.hal.drivers.pdu_http", "HTTPPdu"),
+    "SerialConsole": ("cpe_ta.hal.drivers.serial_console", "SerialConsoleDriver"),
+    "RFAttenuator": ("cpe_ta.hal.drivers.rf_attenuator", "RFAttenuatorDriver"),
+    "USBRelay": ("cpe_ta.hal.drivers.usb_relay", "USBRelayDriver"),
+    "CPE": ("cpe_ta.dut.drivers.generic", "GenericCPEDriver"),
+}
+
+# Mapping from service key to (module, class) for infra real driver introspection.
+# Keys without an entry have no real driver yet → skeleton by default.
+_INFRA_DRIVER_MAP: dict[str, tuple[str, str]] = {
+    "acs": ("cpe_ta.infra.real.genie_acs", "GenieACSClient"),
+    "radius": ("cpe_ta.infra.real.freeradius", "FreeRADIUSAdapter"),
+    "dhcp": ("cpe_ta.infra.real.kea_dhcp", "KeaDHCPAdapter"),
+    "traffic": ("cpe_ta.infra.real.iperf3", "Iperf3Endpoint"),
+}
+
+
+def _introspect_real_status(
+    module_name: str, class_name: str
+) -> Literal["implemented", "partial", "skeleton"]:
+    """Return implementation status of a real driver class via source inspection.
+
+    Checks all public methods for NotImplementedError:
+    - all raise NotImplementedError (or class not found) → "skeleton"
+    - some raise, some don't → "partial"
+    - none raise → "implemented"
+    """
+    try:
+        module = importlib.import_module(module_name)
+        cls = getattr(module, class_name)
+    except (ImportError, AttributeError):
+        return "skeleton"
+
+    not_impl = 0
+    impl = 0
+    for name, method in inspect.getmembers(cls, predicate=inspect.isfunction):
+        if name.startswith("_"):
+            continue
+        try:
+            src = inspect.getsource(method)
+            if "NotImplementedError" in src:
+                not_impl += 1
+            else:
+                impl += 1
+        except (OSError, TypeError):
+            not_impl += 1
+
+    if impl == 0:
+        return "skeleton"
+    if not_impl == 0:
+        return "implemented"
+    return "partial"
+
+
+_HARDWARE_DATA: list[tuple[str, str, str, bool]] = [
+    (
+        "Switch",
+        "Managed switch — port enable/disable, VLAN tagging, speed/duplex, traffic mirroring",
+        "SNMP v2c/v3 or NETCONF; see cpe_ta/hal/drivers/snmp_switch.py",
+        True,
     ),
-    HelpDevice(
-        name="PDU",
-        purpose="Power Distribution Unit — remote power on/off/cycle for DUT and other lab outlets",
-        connection="HTTP REST API; see cpe_ta/hal/drivers/pdu_http.py",
-        sim_available=True,
+    (
+        "PDU",
+        "Power Distribution Unit — remote power on/off/cycle for DUT and other lab outlets",
+        "HTTP REST API; see cpe_ta/hal/drivers/pdu_http.py",
+        True,
     ),
-    HelpDevice(
-        name="SerialConsole",
-        purpose="Serial console server — CPE serial console access, CPU/RAM metric polling",
-        connection="TCP serial-over-IP (e.g. Moxa/Digi); see cpe_ta/hal/drivers/",
-        sim_available=True,
+    (
+        "SerialConsole",
+        "Serial console server — CPE serial console access, CPU/RAM metric polling",
+        "TCP serial-over-IP (e.g. Moxa/Digi); see cpe_ta/hal/drivers/",
+        True,
     ),
-    HelpDevice(
-        name="RFAttenuator",
-        purpose="Programmable RF attenuator — control WiFi signal strength for coverage tests",
-        connection="USB/GPIB; see cpe_ta/hal/drivers/; deferred for headless tests",
-        sim_available=True,
+    (
+        "RFAttenuator",
+        "Programmable RF attenuator — control WiFi signal strength for coverage tests",
+        "USB/GPIB; see cpe_ta/hal/drivers/; deferred for headless tests",
+        True,
     ),
-    HelpDevice(
-        name="USBRelay",
-        purpose="USB relay board — simulate hardware button presses (factory reset, WPS, etc.)",
-        connection="USB HID; see cpe_ta/hal/drivers/",
-        sim_available=True,
+    (
+        "USBRelay",
+        "USB relay board — simulate hardware button presses (factory reset, WPS, etc.)",
+        "USB HID; see cpe_ta/hal/drivers/",
+        True,
     ),
-    HelpDevice(
-        name="CPE",
-        purpose="Customer Premises Equipment (Device Under Test) — the router/modem/gateway being tested",
-        connection="Controlled via PDU (power) + SerialConsole (console) + ACS (CWMP config)",
-        sim_available=True,
+    (
+        "CPE",
+        "Customer Premises Equipment (Device Under Test) — the router/modem/gateway being tested",
+        "Controlled via PDU (power) + SerialConsole (console) + ACS (CWMP config)",
+        True,
     ),
 ]
 
-_INFRA_DATA: list[HelpService] = [
-    HelpService(
-        key="acs",
-        name="ACS — TR-069/CWMP Auto Configuration Server",
-        purpose="Bootstraps CPE, delivers firmware/config via CWMP; required for all ACS/provisioning tests",
-        sim_available=True,
-        note="Real: GenieACS NBI (HTTP); Sim: built-in CWMP simulator in cpe_ta/infra/sim/",
+_INFRA_DATA: list[tuple[str, str, str, bool, str]] = [
+    (
+        "acs",
+        "ACS — TR-069/CWMP Auto Configuration Server",
+        "Bootstraps CPE, delivers firmware/config via CWMP; required for all ACS/provisioning tests",
+        True,
+        "Real: GenieACS NBI (HTTP); Sim: built-in CWMP simulator in cpe_ta/infra/sim/",
     ),
-    HelpService(
-        key="radius",
-        name="RADIUS Authentication Server",
-        purpose="802.1X, PPPoE and WiFi-Enterprise auth; required for WAN/WiFi-Enterprise tests",
-        sim_available=True,
-        note="Real: FreeRADIUS; Sim: in-memory credential store",
+    (
+        "radius",
+        "RADIUS Authentication Server",
+        "802.1X, PPPoE and WiFi-Enterprise auth; required for WAN/WiFi-Enterprise tests",
+        True,
+        "Real: FreeRADIUS; Sim: in-memory credential store",
     ),
-    HelpService(
-        key="dhcp",
-        name="DHCP/DNS Server",
-        purpose="IP address pools, static leases, DHCP options (60/43/121/15/42/125) for provisioning tests",
-        sim_available=True,
-        note="Real: Kea or ISC dhcpd; Sim: in-memory lease table",
+    (
+        "dhcp",
+        "DHCP/DNS Server",
+        "IP address pools, static leases, DHCP options (60/43/121/15/42/125) for provisioning tests",
+        True,
+        "Real: Kea or ISC dhcpd; Sim: in-memory lease table",
     ),
-    HelpService(
-        key="sip",
-        name="SIP/IMS Server",
-        purpose="SIP registration and call setup for VoIP quality tests (codec, MOS, T.38)",
-        sim_available=True,
-        note="Real: Kamailio; Sim: stubbed call result; VoIP audio path is hardware-deferred",
+    (
+        "sip",
+        "SIP/IMS Server",
+        "SIP registration and call setup for VoIP quality tests (codec, MOS, T.38)",
+        True,
+        "Real: Kamailio; Sim: stubbed call result; VoIP audio path is hardware-deferred",
     ),
-    HelpService(
-        key="traffic",
-        name="Traffic Endpoint (iperf3)",
-        purpose="Throughput/latency measurement; required for QoS, performance (RFC 2544/6349) tests",
-        sim_available=True,
-        note="Real: iperf3 server binary; Sim: configurable synthetic TrafficResult",
+    (
+        "traffic",
+        "Traffic Endpoint (iperf3)",
+        "Throughput/latency measurement; required for QoS, performance (RFC 2544/6349) tests",
+        True,
+        "Real: iperf3 server binary; Sim: configurable synthetic TrafficResult",
     ),
-    HelpService(
-        key="ntp",
-        name="NTP Time Server",
-        purpose="Verifies CPE time synchronization; checked during provisioning and ACS tests",
-        sim_available=True,
-        note="Real: chrony or ntpd; Sim: fixed timestamp stub",
+    (
+        "ntp",
+        "NTP Time Server",
+        "Verifies CPE time synchronization; checked during provisioning and ACS tests",
+        True,
+        "Real: chrony or ntpd; Sim: fixed timestamp stub",
     ),
-    HelpService(
-        key="fileserver",
-        name="File Server (HTTP/FTP)",
-        purpose="Provides firmware images and config files for fw_flash and config_restore tests",
-        sim_available=True,
-        note="Real: lighttpd or nginx; Sim: in-memory file store with URL stub",
+    (
+        "fileserver",
+        "File Server (HTTP/FTP)",
+        "Provides firmware images and config files for fw_flash and config_restore tests",
+        True,
+        "Real: lighttpd or nginx; Sim: in-memory file store with URL stub",
     ),
 ]
 
@@ -150,8 +212,10 @@ _QUICKSTART: list[HelpQuickstartStep] = [
         order=5,
         title="Switch to Real Hardware",
         description=(
-            "Update testbed.yaml with real device IPs/credentials, set USE_SIM=0 "
-            "and re-run — the same tests execute against physical hardware."
+            "To test against physical hardware, first implement the real driver classes in "
+            "cpe_ta/hal/drivers/ and cpe_ta/infra/real/ (currently all drivers are documented "
+            "skeletons — see docs/architecture.md for the extension guide). Once a driver is "
+            "implemented, update testbed.yaml with real device IPs/credentials and set USE_SIM=0."
         ),
         command=None,
     ),
@@ -159,9 +223,46 @@ _QUICKSTART: list[HelpQuickstartStep] = [
 
 
 def get_help_content() -> HelpContent:
-    """Return the full help/onboarding content model."""
+    """Return the full help/onboarding content model with introspected real_status."""
+    hardware: list[HelpDevice] = []
+    for name, purpose, connection, sim_available in _HARDWARE_DATA:
+        driver_ref = _HAL_DRIVER_MAP.get(name)
+        rs = (
+            _introspect_real_status(driver_ref[0], driver_ref[1])
+            if driver_ref
+            else "skeleton"
+        )
+        hardware.append(
+            HelpDevice(
+                name=name,
+                purpose=purpose,
+                connection=connection,
+                sim_available=sim_available,
+                real_status=rs,
+            )
+        )
+
+    infrastructure: list[HelpService] = []
+    for key, svc_name, purpose, sim_available, note in _INFRA_DATA:
+        driver_ref = _INFRA_DRIVER_MAP.get(key)
+        rs = (
+            _introspect_real_status(driver_ref[0], driver_ref[1])
+            if driver_ref
+            else "skeleton"
+        )
+        infrastructure.append(
+            HelpService(
+                key=key,
+                name=svc_name,
+                purpose=purpose,
+                sim_available=sim_available,
+                note=note,
+                real_status=rs,
+            )
+        )
+
     return HelpContent(
         quickstart=list(_QUICKSTART),
-        hardware=list(_HARDWARE_DATA),
-        infrastructure=list(_INFRA_DATA),
+        hardware=hardware,
+        infrastructure=infrastructure,
     )

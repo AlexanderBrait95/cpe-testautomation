@@ -1,7 +1,7 @@
 """Pydantic v2 response models for the CPE Dashboard API."""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -106,6 +106,7 @@ class HelpDevice(BaseModel):
     purpose: str
     connection: str
     sim_available: bool
+    real_status: Literal["implemented", "partial", "skeleton"] = "skeleton"
 
 
 class HelpService(BaseModel):
@@ -114,6 +115,7 @@ class HelpService(BaseModel):
     purpose: str
     sim_available: bool
     note: str
+    real_status: Literal["implemented", "partial", "skeleton"] = "skeleton"
 
 
 class HelpContent(BaseModel):

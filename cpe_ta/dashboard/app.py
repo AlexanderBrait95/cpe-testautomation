@@ -1,6 +1,8 @@
 """FastAPI application factory for the CPE Dashboard."""
 from __future__ import annotations
 
+import re
+import tempfile
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
@@ -26,6 +28,53 @@ _STATIC_DIR = Path(__file__).parent / "static"
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8080
+
+# ---------------------------------------------------------------------------
+# Security helpers
+# ---------------------------------------------------------------------------
+
+_INPUT_VALUE_RE = re.compile(r",\s*input_value=.+?,\s*input_type=\w+", re.DOTALL)
+_INPUT_VALUE_TAIL_RE = re.compile(r",\s*input_value=[^\]]+(?=\])")
+_FOR_FURTHER_RE = re.compile(r"\n?For further information.*$", re.DOTALL)
+_SAFE_FILENAME_RE = re.compile(r"[^a-zA-Z0-9\-_]")
+
+
+def _sanitize_config_error(msg: str) -> str:
+    """Strip Pydantic input_value/type leakage to prevent secret disclosure."""
+    msg = _INPUT_VALUE_RE.sub("", msg)
+    msg = _INPUT_VALUE_TAIL_RE.sub("", msg)
+    msg = _FOR_FURTHER_RE.sub("", msg)
+    return msg.strip()
+
+
+def _safe_filename(s: str) -> str:
+    """Sanitize a value for use in a Content-Disposition filename."""
+    return _SAFE_FILENAME_RE.sub("", s)
+
+
+def _is_safe_path(p: Path) -> bool:
+    """Return True when path resolves to within CWD or the OS temp directory.
+
+    Blocks directory traversal (../../etc/passwd) and absolute paths to
+    system files (/etc/passwd, /proc/self/environ, etc.).
+    """
+    try:
+        resolved = p.resolve()
+        cwd = Path.cwd().resolve()
+        try:
+            resolved.relative_to(cwd)
+            return True
+        except ValueError:
+            pass
+        tmp_root = Path(tempfile.gettempdir()).resolve()
+        try:
+            resolved.relative_to(tmp_root)
+            return True
+        except ValueError:
+            pass
+        return False
+    except OSError:
+        return False
 
 
 def create_app(
@@ -104,19 +153,20 @@ def create_app(
     @app.get("/api/runs/{run_id}/export")
     def api_export_run(run_id: str, format: str = Query(default="junit")) -> Response:
         detail = _get_run_detail_or_404(run_id)
+        safe_id = _safe_filename(run_id)
         if format == "junit":
             content = _data.run_junit_bytes(detail)
             return Response(
                 content=content,
                 media_type="application/xml",
-                headers={"Content-Disposition": f'attachment; filename="run-{run_id}.xml"'},
+                headers={"Content-Disposition": f'attachment; filename="run-{safe_id}.xml"'},
             )
         if format == "html":
-            html = _data.render_run_html(detail)
+            html_content = _data.render_run_html(detail)
             return Response(
-                content=html.encode("utf-8"),
+                content=html_content.encode("utf-8"),
                 media_type="text/html",
-                headers={"Content-Disposition": f'attachment; filename="run-{run_id}.html"'},
+                headers={"Content-Disposition": f'attachment; filename="run-{safe_id}.html"'},
             )
         raise HTTPException(status_code=422, detail=f"Unknown format {format!r}. Use 'junit' or 'html'.")
 
@@ -156,14 +206,20 @@ def create_app(
 
         yaml_path = path or testbed_path or "testbed.yaml"
         p = Path(yaml_path)
+
+        if not _is_safe_path(p):
+            raise HTTPException(status_code=400, detail="Path not allowed")
+
         if not p.exists():
-            return InventoryValidateResult(ok=False, errors=[f"File not found: {yaml_path}"])
+            return InventoryValidateResult(ok=False, errors=["File not found"])
         try:
             tb = load_testbed(str(p))
         except ConfigError as exc:
-            return InventoryValidateResult(ok=False, errors=[str(exc)])
-        except Exception as exc:  # noqa: BLE001
-            return InventoryValidateResult(ok=False, errors=[f"Unexpected error: {exc}"])
+            return InventoryValidateResult(
+                ok=False, errors=[_sanitize_config_error(str(exc))]
+            )
+        except Exception:  # noqa: BLE001
+            return InventoryValidateResult(ok=False, errors=["Validation error"])
         wiring_errors = validate_wiring_map(tb.wiring_map)
         if wiring_errors:
             return InventoryValidateResult(ok=False, errors=wiring_errors)

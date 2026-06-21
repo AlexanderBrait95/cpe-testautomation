@@ -1,11 +1,14 @@
 """Data aggregation layer: JUnit-XML parser + ResultsDB reader."""
 from __future__ import annotations
 
+import html as _html
 import logging
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
+
+import defusedxml.ElementTree as _defused_ET
 
 from cpe_ta.dashboard.models import (
     DeviceStatus,
@@ -64,10 +67,13 @@ def parse_junit(path: str | Path) -> list[TestEntry]:
     if not p.exists():
         return []
     try:
-        tree = ET.parse(str(p))
+        tree = _defused_ET.parse(str(p))
         root = tree.getroot()
     except ET.ParseError as exc:
         logger.warning("JUnit XML parse error (%s): %s — returning empty list", p, exc)
+        return []
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("JUnit XML blocked/parse error (%s): %s — returning empty list", p, exc)
         return []
 
     entries: list[TestEntry] = []
@@ -366,36 +372,43 @@ def run_junit_bytes(run_detail: RunDetail) -> bytes:
 
 
 def render_run_html(run_detail: RunDetail) -> str:
-    """Render a RunDetail as a minimal standalone HTML report."""
+    """Render a RunDetail as a minimal standalone HTML report (XSS-safe via html.escape)."""
     from datetime import datetime  # noqa: PLC0415
 
     ts_str = datetime.utcfromtimestamp(run_detail.timestamp).strftime("%Y-%m-%d %H:%M:%S UTC")
+    safe_run_id = _html.escape(run_detail.run_id)
+    safe_git_sha = _html.escape(run_detail.git_sha or "")
     rows = []
     for t in run_detail.tests:
         color = {"passed": "#4ade80", "failed": "#f87171", "skipped": "#fbbf24", "error": "#fb923c"}.get(
             t.status, "#94a3b8"
         )
+        safe_status = _html.escape(t.status)
+        safe_name = _html.escape(t.name)
+        safe_domain = _html.escape(t.domain)
         msg = ""
         if t.message:
-            msg = f"<br><small style='color:#94a3b8'>{t.message[:200]}</small>"
+            safe_msg = _html.escape(t.message[:200])
+            msg = f"<br><small style='color:#94a3b8'>{safe_msg}</small>"
         rows.append(
-            f"<tr><td style='color:{color}'>{t.status}</td>"
-            f"<td>{t.name}{msg}</td>"
-            f"<td>{t.domain}</td>"
+            f"<tr><td style='color:{color}'>{safe_status}</td>"
+            f"<td>{safe_name}{msg}</td>"
+            f"<td>{safe_domain}</td>"
             f"<td>{t.duration_s:.3f}s</td></tr>"
         )
     rows_html = "\n".join(rows) if rows else "<tr><td colspan='4'>No tests</td></tr>"
     passed = sum(1 for t in run_detail.tests if t.status == "passed")
     failed = sum(1 for t in run_detail.tests if t.status == "failed")
+    sha_display = safe_git_sha or "—"
     return f"""<!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8"><title>Run {run_detail.run_id}</title>
+<head><meta charset="UTF-8"><title>Run {safe_run_id}</title>
 <style>body{{font-family:system-ui;background:#0f172a;color:#e2e8f0;padding:2rem}}
 table{{border-collapse:collapse;width:100%}}th,td{{padding:.5rem .75rem;border-bottom:1px solid #334155;text-align:left}}
 th{{color:#64748b;text-transform:uppercase;font-size:.8rem}}</style></head>
 <body>
-<h1>Run {run_detail.run_id}</h1>
-<p>{ts_str} &nbsp;|&nbsp; {passed} passed &nbsp;|&nbsp; {failed} failed &nbsp;|&nbsp; SHA: {run_detail.git_sha or '—'}</p>
+<h1>Run {safe_run_id}</h1>
+<p>{ts_str} &nbsp;|&nbsp; {passed} passed &nbsp;|&nbsp; {failed} failed &nbsp;|&nbsp; SHA: {sha_display}</p>
 <table>
 <thead><tr><th>Status</th><th>Test</th><th>Domain</th><th>Duration</th></tr></thead>
 <tbody>{rows_html}</tbody>

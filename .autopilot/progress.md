@@ -121,7 +121,25 @@
 - [x] TD-02 — ruff clean, mypy --strict clean, Dashboard-Coverage ≥80%
 - [x] TD-03 — `make verify` EXIT 0: **689 passed, 0 failed**, Coverage 90%
 
+## Gruppe §16 — Nachschärfung (Gate-Reparatur, Iteration 8)
+
+### S — Sicherheits-Härtung der §15-Routen
+- [x] TS-01 — `inventory/validate` Pfad-Whitelist + Error-Sanitisierung (AC-46): `_is_safe_path` (CWD|tmp), `_sanitize_config_error`, Traversal/Foreign-Paths → 400, Secret-Token nicht in Response
+- [x] TS-02 — HTML-Export XSS-frei (AC-47): `html.escape()` für alle interpolierten Felder in `render_run_html`, Content-Disposition-Filename gesäubert
+- [x] TS-03 — JUnit-Parsing entity-bomb-fest (AC-48): `defusedxml>=0.7` in deps + `_defused_ET.parse()` in `parse_junit`, Billion-Laughs-Test terminiert < 1s
+- [x] TS-04 — Runner-Ausgabepuffer beschränkt (AC-49): `deque(maxlen=1000)` statt unbegrenzter list, `list(self._lines)[-20:]` für Tail
+- [x] TS-05 — Host-Sicherheitswarnung bei Nicht-Loopback-Bind (AC-50): `_LOOPBACK_HOSTS` + Warning auf stderr vor uvicorn.run
+
+### P — Ehrliches Real-Status-Onboarding
+- [x] TP-01 — `real_status`-Feld via Treiber-Introspektion (AC-45): `Literal[...]` in `HelpDevice`/`HelpService`, `_introspect_real_status()` + Treiber-Mappings in `help.py`, alle aktuell "skeleton"
+- [x] TP-02 — Ehrlicher Quickstart "Switch to Real Hardware" (AC-45): Keine Behauptung sofort lauffähigem Real-Testing, Verweis auf Treiber-Implementierung + docs/architecture.md
+- [x] TP-03 — Frontend rendert `real_status` sichtbar (AC-45 UI): `realStatusBadge()` in `app.js` für Hardware- und Infra-Einträge
+
+### G — Gate-Konformität
+- [x] TG-01 — ruff clean, mypy --strict clean (data.py, models.py, help.py, runner.py), Dashboard-Coverage ≥ 80 %
+- [x] TG-02 — `make verify` EXIT 0: **710 passed (689+21 neue), 0 failed**, Coverage 91%, AC-22 (15 skipped), AC-01..AC-44 regressionsfrei
+
 ## Done-Gate Status
-**GRÜN — 689 Tests (559 Kern + 130 Dashboard), ruff clean, mypy --strict clean, Coverage 90%, AC-22 (15 skipped)**
-**Dashboard AC-23..AC-44: alle erfüllt**
-**Iteration 7 (§15 Dashboard v2): Gate grün — 689 passed 0 failed, alle §15-ACs implementiert und verifiziert**
+**GRÜN — 710 Tests, ruff clean, mypy --strict clean, Coverage 91%, AC-22 (15 skipped)**
+**AC-45..AC-50 (§16): alle erfüllt**
+**Iteration 8 (§16 Nachschärfung): Gate grün — 710 passed 0 failed**
