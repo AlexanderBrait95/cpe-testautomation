@@ -10,8 +10,17 @@ from cpe_ta.dashboard.app import create_app
 
 pytestmark = pytest.mark.headless
 
-REAL_XML = str(Path(__file__).parent.parent.parent / "test-results.xml")
 MINI_XML = str(Path(__file__).parent / "fixtures" / "mini.xml")
+
+# Stabile Fixture für AC-25 — nie von make verify überschrieben
+SAMPLE_XML = str(Path(__file__).parent / "fixtures" / "sample-results.xml")
+
+# Soll-Werte aus sample-results.xml (Kommentar-Header in der Fixture)
+EXPECTED_TOTAL = 10
+EXPECTED_PASSED = 6
+EXPECTED_FAILED = 1
+EXPECTED_SKIPPED = 2
+EXPECTED_ERROR = 1
 
 
 @pytest.fixture()
@@ -76,22 +85,33 @@ def test_post_runs_endpoint_exists(client):
 
 
 # ---------------------------------------------------------------------------
-# AC-25: real test-results.xml — counters correct
+# AC-25: stabile Fixture — Zähler korrekt + Domain-Aggregation
 # ---------------------------------------------------------------------------
 
 
 def test_overview_real_xml_counts():
-    if not Path(REAL_XML).exists():
-        pytest.skip("test-results.xml not found")
-    app = create_app(results_path=REAL_XML)
-    client = TestClient(app)
-    r = client.get("/api/overview")
+    """AC-25: Overview-Zähler aus stabiler Fixture; Domain-Aggregation mitgeprüft."""
+    app = create_app(results_path=SAMPLE_XML)
+    tc = TestClient(app)
+
+    r = tc.get("/api/overview")
     assert r.status_code == 200
     d = r.json()
-    # 559 tests, all passed per the existing run
-    assert d["total"] == 559
-    assert d["passed"] == 559
-    assert d["failed"] == 0
+    assert d["total"] == EXPECTED_TOTAL
+    assert d["passed"] == EXPECTED_PASSED
+    assert d["failed"] == EXPECTED_FAILED
+    assert d["skipped"] == EXPECTED_SKIPPED
+    assert d["error"] == EXPECTED_ERROR
+
+    # Domain-Aggregation: 3 Domains erwartet (lan, wan, wifi)
+    r2 = tc.get("/api/domains")
+    assert r2.status_code == 200
+    domains = {item["name"]: item for item in r2.json()}
+    assert set(domains.keys()) == {"lan", "wan", "wifi"}
+    assert domains["lan"]["passed"] == 2
+    assert domains["lan"]["failed"] == 1
+    assert domains["wan"]["skipped"] == 1
+    assert domains["wifi"]["error"] == 1
 
 
 # ---------------------------------------------------------------------------

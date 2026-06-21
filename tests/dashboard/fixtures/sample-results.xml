@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Stabile Testfixture für AC-25 (Dashboard-Overview-Zähler-Test).
+  Bekannte Soll-Werte — NIEMALS von make verify überschrieben.
+
+  EXPECTED_TOTAL   = 10
+  EXPECTED_PASSED  = 6
+  EXPECTED_FAILED  = 1
+  EXPECTED_SKIPPED = 2
+  EXPECTED_ERROR   = 1
+
+  Domain-Aufteilung (alphabetisch):
+    lan  : total=3, passed=2, failed=1, skipped=0, error=0
+    wan  : total=3, passed=2, failed=0, skipped=1, error=0
+    wifi : total=4, passed=2, failed=0, skipped=1, error=1
+-->
+<testsuites>
+  <testsuite name="sample" tests="10" failures="1" errors="1" skipped="2" time="1.23">
+
+    <!-- domain: lan (3 tests: 2 passed, 1 failed) -->
+    <testcase classname="tests.lan.test_lan" name="test_autoneg" time="0.05"/>
+    <testcase classname="tests.lan.test_lan" name="test_duplex" time="0.04"/>
+    <testcase classname="tests.lan.test_lan" name="test_collision" time="0.06">
+      <failure message="AssertionError: collision counter mismatch">Expected 0, got 3</failure>
+    </testcase>
+
+    <!-- domain: wan (3 tests: 2 passed, 1 skipped) -->
+    <testcase classname="tests.wan.test_wan" name="test_pppoe_connect" time="0.12"/>
+    <testcase classname="tests.wan.test_wan" name="test_dhcp_renew" time="0.08"/>
+    <testcase classname="tests.wan.test_wan" name="test_vlan_tag" time="0.00">
+      <skipped message="requires physical WAN port"/>
+    </testcase>
+
+    <!-- domain: wifi (4 tests: 2 passed, 1 skipped, 1 error) -->
+    <testcase classname="tests.wifi.test_wifi" name="test_wpa2" time="0.15"/>
+    <testcase classname="tests.wifi.test_wifi" name="test_beacon" time="0.09"/>
+    <testcase classname="tests.wifi.test_wifi" name="test_channel_scan" time="0.00">
+      <skipped message="requires RF environment"/>
+    </testcase>
+    <testcase classname="tests.wifi.test_wifi" name="test_dfs_radar" time="0.03">
+      <error message="RuntimeError: HAL device not available">Traceback (most recent call last):
+  File "tests/wifi/test_wifi.py", line 42, in test_dfs_radar
+    hal.detect_radar()
+RuntimeError: HAL device not available</error>
+    </testcase>
+
+  </testsuite>
+</testsuites>

@@ -68,6 +68,11 @@
 - [x] T41 — Gate deckt Framework-Unit-Tests ab
 - [x] T42 — Deferred-Matrix bereinigen
 
+## Gruppe Z² — Gate-Reparatur GAP-1 (Iteration 5)
+- [x] TZ-01 — Stabile Sample-JUnit-XML `tests/dashboard/fixtures/sample-results.xml` angelegt (10 Tests, 3 Domains, bekannte Sollzahlen)
+- [x] TZ-02 — `test_overview_real_xml_counts` auf stabile Fixture umgestellt; Hardcode 559 entfernt; Domain-Aggregation mitgeprüft
+- [x] TZ-03 — `make verify`-Gate läuft exit 0: ruff clean, mypy clean, 620 passed 0 failed, Coverage 89%, AC-22 15 skipped
+
 ## Gruppe DA — Dashboard-Fundament
 - [x] T-D01 — Dashboard-Dependencies & Package-Skelett (fastapi/uvicorn/httpx in pyproject.toml + requirements.txt; cpe_ta/dashboard/ angelegt)
 - [x] T-D02 — Pydantic Response-Modelle models.py (OverviewModel, DomainStat, RunSummary, RunDetail, TestEntry, TestbedStatus, RunStartRequest, RunProgress)
@@ -95,3 +100,4 @@
 ## Done-Gate Status
 **GRÜN — 620 Tests (559 Kern + 61 Dashboard), ruff clean, mypy --strict clean, Coverage 89%, AC-22 (15 skipped)**
 **Dashboard AC-23..AC-31: alle erfüllt**
+**Iteration 5 (GAP-1): Gate repariert — 620 passed 0 failed, keine spröde Assertion mehr**
