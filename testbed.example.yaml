@@ -1,0 +1,67 @@
+# Example testbed configuration for CPE Test-Automation Framework
+# Copy to testbed.yaml and adjust for your lab environment.
+#
+# SECURITY NOTE: Never put real credentials or SNMP community strings here.
+# Use environment variables or a secrets-file; reference the env-var name
+# in the 'community' / 'credentials' fields if you need to document the
+# variable name (the loader does NOT expand env-vars automatically — that
+# is done by the HAL factory at instrument creation time).
+
+id: "lab-testbed-01"
+
+# ---------------------------------------------------------------------------
+# Managed switches
+# ---------------------------------------------------------------------------
+switches:
+  - switch_id: "sw-core-01"
+    host: "192.168.100.10"
+    protocol: "snmp"
+    # community string is read from env var SWITCH_SW_CORE_01_COMMUNITY at runtime
+    community: null
+
+# ---------------------------------------------------------------------------
+# Power Distribution Units
+# ---------------------------------------------------------------------------
+pdus:
+  - pdu_id: "pdu-rack-01"
+    host: "192.168.100.20"
+    protocol: "http"
+
+# ---------------------------------------------------------------------------
+# Devices Under Test (CPEs)
+# ---------------------------------------------------------------------------
+duts:
+  - dut_id: "dut-01"
+    model: "CPE-X500"
+    vendor: "Acme"
+    capabilities_file: "capabilities/dut-01.yaml"
+    wiring:
+      - "DUT-LAN-1"
+      - "DUT-LAN-2"
+      - "DUT-WAN"
+      - "TRAFFIC-EP-1"
+
+# ---------------------------------------------------------------------------
+# Wiring Map  (logical role -> physical switch:port)
+# ---------------------------------------------------------------------------
+wiring_map:
+  entries:
+    - role: "DUT-LAN-1"
+      port:
+        switch_id: "sw-core-01"
+        port_id: "gi0/1"
+
+    - role: "DUT-LAN-2"
+      port:
+        switch_id: "sw-core-01"
+        port_id: "gi0/2"
+
+    - role: "DUT-WAN"
+      port:
+        switch_id: "sw-core-01"
+        port_id: "gi0/3"
+
+    - role: "TRAFFIC-EP-1"
+      port:
+        switch_id: "sw-core-01"
+        port_id: "gi0/4"

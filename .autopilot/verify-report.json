@@ -1,0 +1,16 @@
+{
+  "tests_run": true,
+  "tests_passed": true,
+  "test_summary": "make verify exit 0: ruff clean, mypy --strict clean, 559 passed (417 headless + 142 unit), coverage 90% total / 98% core+hal; pytest -m hardware = 15 skipped (0 fail); -n4 headless 417 passed.",
+  "gaps": [],
+  "spec_coverage": "complete",
+  "verdict": "clean",
+  "hardware_deferred": [
+    { "area": "Access-Tech (DSL/DOCSIS/PON/FWA)", "desc": "DSL-Sync/SNR, DOCSIS-Channel-Lock, PON-Registrierung/RX-Power/Dying-Gasp, FWA-APN an echtem Anschluss/CMTS/OLT", "interface": "DSL/DOCSIS/PON/Mobilfunk" },
+    { "area": "WiFi RF", "desc": "RF-Durchsatz, 802.11r-Roaming, DFS-Radar-Detection — physische RF-Messung in Schirmkammer", "interface": "RF/Schirmkammer/Daempfer" },
+    { "area": "Stress/Soak", "desc": "24h-Soak und WiFi+LAN+Voice-Langlauf an physischem DUT", "interface": "Physisches DUT/RF/VoIP" },
+    { "area": "VoIP", "desc": "MTC-Call und T.38-Fax ueber echten Audio-/Fax-Pfad", "interface": "SIP-Phone/IMS/T.38-Gateway" },
+    { "area": "USB-Medien", "desc": "Samba-Playback und DLNA-Streaming von echtem USB-Stick", "interface": "USB" },
+    { "area": "Firmware-Flash (real DUT)", "desc": "test_fw_flash_real/test_fw_rollback_real — geplant P2, in Matrix als geplant markiert, keine Geister-Testfunktion", "interface": "Physisches CPE-DUT" }
+  ]
+}

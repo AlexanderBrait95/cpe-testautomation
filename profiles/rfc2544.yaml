@@ -1,0 +1,36 @@
+# RFC 2544 — Layer 2/3 Throughput Profile
+#
+# Reference: RFC 2544 "Benchmarking Methodology for Network Interconnect Devices"
+# Use: UDP traffic, minimum aggregate across repetitions.
+#
+# IMPORTANT: Set 'threshold_mbps' per interface speed in your lab overlay.
+# The base profile ships with threshold: null to prevent silent passes.
+#
+# Example overlay (site-specific):
+#   threshold_mbps: 940   # for 1 GbE line-rate (typical 94 %)
+
+profile_id: "rfc2544"
+description: "RFC 2544 Layer 2/3 throughput benchmarking"
+
+transport: "udp"
+tool: "iperf3"
+duration_s: 60
+repetitions: 3
+aggregate: "min"
+tolerance: 0.0
+
+# Threshold must be set per-interface in lab configuration.
+# null = pytest.skip (REQ-CRIT-03 — no silent pass allowed)
+threshold_mbps: null
+
+# Frame sizes tested per RFC 2544 §26.1
+frame_sizes_bytes: [64, 128, 256, 512, 1024, 1280, 1518]
+
+# Notes
+notes: |
+  Threshold is intentionally null in the base profile.
+  Override per lab/interface in a site-specific profile overlay.
+  Linerate reference values:
+    100 Mbit/s FE  → threshold_mbps: 94
+    1000 Mbit/s GE → threshold_mbps: 940
+    2.5G           → threshold_mbps: 2350

@@ -1,0 +1,42 @@
+# RFC 6349 — TCP Throughput (Goodput) Profile
+#
+# Reference: RFC 6349 "Framework for TCP Throughput Testing"
+# Use: TCP traffic, median aggregate across repetitions.
+#
+# IMPORTANT: Set 'threshold_mbps' per access technology in your lab overlay.
+# The base profile ships with threshold: null to prevent silent passes.
+#
+# Example overlays:
+#   VDSL2-50/10 → threshold_mbps: 47
+#   GPON-1G     → threshold_mbps: 900
+
+profile_id: "rfc6349"
+description: "RFC 6349 TCP goodput throughput testing"
+
+transport: "tcp"
+tool: "iperf3"
+duration_s: 30
+repetitions: 5
+aggregate: "median"
+tolerance: 0.05
+
+# Threshold must be set per access technology in lab configuration.
+# null = pytest.skip (REQ-CRIT-03 — no silent pass allowed)
+threshold_mbps: null
+
+# Bidirectional testing (download + upload)
+directions: ["download", "upload"]
+
+# TCP buffer size recommendation per RFC 6349 §3.1
+# (2 * RTT * bandwidth_product — adjust per link)
+tcp_buffer_size_auto: true
+
+# Notes
+notes: |
+  Threshold is intentionally null in the base profile.
+  Override per access technology / provisioned speed in lab overlays.
+  Goodput reference values (approx. 90 % of line-rate):
+    VDSL2 50/10  → threshold_mbps: 45 (down), 9 (up)
+    GPON 1G/1G   → threshold_mbps: 900
+    DOCSIS 3.1   → threshold_mbps: 1000 (down), 100 (up)
+    FWA 100/50   → threshold_mbps: 90 (down), 45 (up)

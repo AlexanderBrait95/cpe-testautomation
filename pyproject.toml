@@ -1,0 +1,92 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cpe-ta"
+version = "0.1.0"
+description = "CPE Hardware & Software Acceptance Test Automation Framework"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "pytest>=7.4",
+    "pytest-xdist>=3.3",
+    "pydantic>=2.0",
+    "pyyaml>=6.0",
+    "click>=8.1",
+    "jinja2>=3.1",
+    "matplotlib>=3.7",
+    "sqlalchemy>=2.0",
+    "coverage>=7.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-xdist>=3.3",
+    "pytest-cov>=4.0",
+    "ruff>=0.1",
+    "mypy>=1.5",
+    "types-PyYAML>=6.0",
+    "matplotlib>=3.7",
+    "jinja2>=3.1",
+]
+
+[project.scripts]
+cpe-ta = "cpe_ta.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["cpe_ta*"]
+
+# ---------------------------------------------------------------------------
+# ruff
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
+ignore = ["E501"]  # line-length enforced by formatter only
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]
+
+# ---------------------------------------------------------------------------
+# mypy
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+exclude = ["tests/", "profiles/"]
+
+# ---------------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "smoke: fast smoke-tests (subset of regression)",
+    "full: full test suite",
+    "regression: regression test suite",
+    "tech_dsl: requires DSL technology/connectivity",
+    "tech_docsis: requires DOCSIS technology/connectivity",
+    "tech_pon: requires PON technology/connectivity",
+    "tech_fwa: requires FWA technology/connectivity",
+    "headless: runs without any physical hardware (against simulators)",
+    "hardware: requires physical hardware — skipped when hardware absent",
+]
+addopts = "--strict-markers"
+
+# ---------------------------------------------------------------------------
+# coverage
+# ---------------------------------------------------------------------------
+[tool.coverage.run]
+source = ["cpe_ta"]
+omit = ["cpe_ta/hal/drivers/*", "cpe_ta/infra/real/*"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 0  # enforced per-module in make verify

@@ -1,0 +1,63 @@
+stages:
+  - lint
+  - typecheck
+  - test
+  - report
+  - nightly
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
+
+cache:
+  paths:
+    - .pip-cache/
+
+lint:
+  stage: lint
+  image: python:3.11
+  script:
+    - pip install -e ".[dev]"
+    - ruff check cpe_ta tests
+
+typecheck:
+  stage: typecheck
+  image: python:3.11
+  script:
+    - pip install -e ".[dev]"
+    - mypy --strict cpe_ta/core cpe_ta/hal/base.py
+
+unit-tests:
+  stage: test
+  image: python:3.11
+  script:
+    - pip install -e ".[dev]"
+    - pytest -m "not hardware" -n auto --junitxml=test-results.xml --cov=cpe_ta --cov-report=term
+  artifacts:
+    reports:
+      junit: test-results.xml
+    paths:
+      - test-results.xml
+      - htmlcov/
+
+generate-report:
+  stage: report
+  image: python:3.11
+  needs: [unit-tests]
+  script:
+    - pip install -e ".[dev]"
+    - cpe-ta report --input test-results.xml --output report.html || true
+  artifacts:
+    paths:
+      - report.html
+
+nightly-regression:
+  stage: nightly
+  image: python:3.11
+  only:
+    - schedules
+  script:
+    - pip install -e ".[dev]"
+    - pytest -m "regression" -n auto --junitxml=nightly-results.xml
+  artifacts:
+    reports:
+      junit: nightly-results.xml
