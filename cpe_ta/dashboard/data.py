@@ -263,6 +263,147 @@ def get_testbed_status(testbed_path: str | None) -> TestbedStatus:
 
 
 # ---------------------------------------------------------------------------
+# Filter / Sort helpers (AC-34)
+# ---------------------------------------------------------------------------
+
+_VALID_STATUSES = frozenset({"passed", "failed", "skipped", "error"})
+_VALID_SORT_FIELDS = frozenset({"time", "duration", "status"})
+
+
+def filter_runs(
+    runs: list[RunSummary],
+    q: str | None = None,
+) -> list[RunSummary]:
+    """Filter run summaries by free-text query (run_id / git_sha)."""
+    if not q:
+        return list(runs)
+    q_lower = q.lower()
+    return [
+        r for r in runs
+        if q_lower in r.run_id.lower() or q_lower in (r.git_sha or "").lower()
+    ]
+
+
+def sort_runs(
+    runs: list[RunSummary],
+    sort: str | None = None,
+) -> list[RunSummary]:
+    """Sort run summaries. Prefix '-' for descending. Ignores unknown keys."""
+    if not sort:
+        return list(runs)
+    desc = sort.startswith("-")
+    key = sort.lstrip("-")
+    if key not in _VALID_SORT_FIELDS:
+        return list(runs)
+    if key == "time":
+        return sorted(runs, key=lambda r: r.timestamp, reverse=desc)
+    if key == "duration":
+        return sorted(runs, key=lambda r: r.duration_s, reverse=desc)
+    if key == "status":
+        # Status sort: rank by failed > error > skipped > passed
+        _rank = {"failed": 0, "error": 1, "skipped": 2, "passed": 3}
+
+        def _status_key(r: RunSummary) -> int:
+            if r.failed:
+                return _rank["failed"]
+            if r.error:
+                return _rank["error"]
+            if r.skipped:
+                return _rank["skipped"]
+            return _rank["passed"]
+
+        return sorted(runs, key=_status_key, reverse=desc)
+    return list(runs)
+
+
+def filter_entries(
+    entries: list[TestEntry],
+    status: str | None = None,
+    domain: str | None = None,
+    q: str | None = None,
+) -> list[TestEntry]:
+    """Filter test entries by status, domain and/or free-text query."""
+    result = entries
+    if status and status in _VALID_STATUSES:
+        result = [e for e in result if e.status == status]
+    if domain:
+        d_lower = domain.lower()
+        result = [e for e in result if e.domain.lower() == d_lower]
+    if q:
+        q_lower = q.lower()
+        result = [e for e in result if q_lower in e.name.lower() or q_lower in e.domain.lower()]
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Export helpers (AC-35)
+# ---------------------------------------------------------------------------
+
+
+def run_junit_bytes(run_detail: RunDetail) -> bytes:
+    """Render a RunDetail as minimal JUnit XML bytes."""
+    import xml.etree.ElementTree as ET  # noqa: PLC0415
+
+    root = ET.Element(
+        "testsuite",
+        name=run_detail.run_id,
+        tests=str(len(run_detail.tests)),
+        timestamp=str(run_detail.timestamp),
+    )
+    for t in run_detail.tests:
+        tc = ET.SubElement(root, "testcase", name=t.name, classname=t.domain, time=str(t.duration_s))
+        if t.status == "failed":
+            fail_el = ET.SubElement(tc, "failure")
+            fail_el.set("message", t.message or "")
+            fail_el.text = t.stacktrace or ""
+        elif t.status == "error":
+            err_el = ET.SubElement(tc, "error")
+            err_el.set("message", t.message or "")
+            err_el.text = t.stacktrace or ""
+        elif t.status == "skipped":
+            ET.SubElement(tc, "skipped")
+    return ET.tostring(root, encoding="unicode").encode("utf-8")
+
+
+def render_run_html(run_detail: RunDetail) -> str:
+    """Render a RunDetail as a minimal standalone HTML report."""
+    from datetime import datetime  # noqa: PLC0415
+
+    ts_str = datetime.utcfromtimestamp(run_detail.timestamp).strftime("%Y-%m-%d %H:%M:%S UTC")
+    rows = []
+    for t in run_detail.tests:
+        color = {"passed": "#4ade80", "failed": "#f87171", "skipped": "#fbbf24", "error": "#fb923c"}.get(
+            t.status, "#94a3b8"
+        )
+        msg = ""
+        if t.message:
+            msg = f"<br><small style='color:#94a3b8'>{t.message[:200]}</small>"
+        rows.append(
+            f"<tr><td style='color:{color}'>{t.status}</td>"
+            f"<td>{t.name}{msg}</td>"
+            f"<td>{t.domain}</td>"
+            f"<td>{t.duration_s:.3f}s</td></tr>"
+        )
+    rows_html = "\n".join(rows) if rows else "<tr><td colspan='4'>No tests</td></tr>"
+    passed = sum(1 for t in run_detail.tests if t.status == "passed")
+    failed = sum(1 for t in run_detail.tests if t.status == "failed")
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>Run {run_detail.run_id}</title>
+<style>body{{font-family:system-ui;background:#0f172a;color:#e2e8f0;padding:2rem}}
+table{{border-collapse:collapse;width:100%}}th,td{{padding:.5rem .75rem;border-bottom:1px solid #334155;text-align:left}}
+th{{color:#64748b;text-transform:uppercase;font-size:.8rem}}</style></head>
+<body>
+<h1>Run {run_detail.run_id}</h1>
+<p>{ts_str} &nbsp;|&nbsp; {passed} passed &nbsp;|&nbsp; {failed} failed &nbsp;|&nbsp; SHA: {run_detail.git_sha or '—'}</p>
+<table>
+<thead><tr><th>Status</th><th>Test</th><th>Domain</th><th>Duration</th></tr></thead>
+<tbody>{rows_html}</tbody>
+</table>
+</body></html>"""
+
+
+# ---------------------------------------------------------------------------
 # Combined loader — main source of truth for results_path
 # ---------------------------------------------------------------------------
 

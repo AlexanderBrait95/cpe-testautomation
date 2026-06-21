@@ -82,8 +82,51 @@ class RunStartRequest(BaseModel):
 
 
 class RunProgress(BaseModel):
-    status: str  # running | finished | failed | idle
+    status: str  # running | finished | failed | idle | cancelled
     run_id: str | None = None
     started: float | None = None
     lines_tail: list[str] = []
     counts: dict[str, int] = {}
+
+
+# ---------------------------------------------------------------------------
+# Help / Onboarding models (§15, AC-36..AC-39)
+# ---------------------------------------------------------------------------
+
+
+class HelpQuickstartStep(BaseModel):
+    order: int
+    title: str
+    description: str
+    command: str | None = None
+
+
+class HelpDevice(BaseModel):
+    name: str
+    purpose: str
+    connection: str
+    sim_available: bool
+
+
+class HelpService(BaseModel):
+    key: str
+    name: str
+    purpose: str
+    sim_available: bool
+    note: str
+
+
+class HelpContent(BaseModel):
+    quickstart: list[HelpQuickstartStep]
+    hardware: list[HelpDevice]
+    infrastructure: list[HelpService]
+
+
+# ---------------------------------------------------------------------------
+# Inventory validation model (§15, AC-43)
+# ---------------------------------------------------------------------------
+
+
+class InventoryValidateResult(BaseModel):
+    ok: bool
+    errors: list[str]

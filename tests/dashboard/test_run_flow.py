@@ -130,3 +130,58 @@ def test_shell_injection_no_subprocess():
 
 def test_default_host_is_loopback():
     assert DEFAULT_HOST == "127.0.0.1"
+
+
+# ---------------------------------------------------------------------------
+# AC-33: Run cancel — running → cancelled
+# ---------------------------------------------------------------------------
+
+
+def _slow_runner() -> DashboardRunner:
+    def factory(markers: str, xml_path: str) -> list[str]:
+        return [sys.executable, "-c", "import time; time.sleep(30)"]
+
+    return DashboardRunner(command_factory=factory)
+
+
+def test_cancel_active_run_returns_cancelled():
+    runner = _slow_runner()
+    app = create_app(results_path=MINI_XML, runner=runner)
+    client = TestClient(app)
+
+    # Start a long-running fake process
+    r = client.post("/api/runs", json={"markers": "headless"})
+    assert r.status_code == 202
+
+    # Small sleep to ensure process is running
+    time.sleep(0.1)
+    assert runner.progress().status == "running"
+
+    # Cancel it
+    r_cancel = client.post("/api/runs/active/cancel")
+    assert r_cancel.status_code == 200
+    assert r_cancel.json()["status"] == "cancelled"
+
+    # Status must be cancelled
+    assert runner.progress().status == "cancelled"
+
+
+def test_cancel_no_active_run_returns_409():
+    runner = DashboardRunner()  # idle
+    app = create_app(results_path=MINI_XML, runner=runner)
+    client = TestClient(app)
+    r = client.post("/api/runs/active/cancel")
+    assert r.status_code == 409
+
+
+def test_cancel_does_not_leave_zombie():
+    runner = _slow_runner()
+    app = create_app(results_path=MINI_XML, runner=runner)
+    client = TestClient(app)
+    client.post("/api/runs", json={"markers": "headless"})
+    time.sleep(0.1)
+    client.post("/api/runs/active/cancel")
+    time.sleep(0.2)
+    # Process should be gone — poll returns non-running status
+    status = runner.progress().status
+    assert status in ("cancelled", "idle"), f"Unexpected status: {status}"

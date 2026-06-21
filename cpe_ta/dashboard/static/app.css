@@ -126,3 +126,41 @@ pre {
 
 a.link { color: #38bdf8; text-decoration: none; }
 a.link:hover { text-decoration: underline; }
+
+/* Empty states (AC-40) */
+.empty-state { text-align: center; padding: 1.5rem; }
+.empty-msg { color: #475569; font-size: .95rem; margin: 0 0 .5rem; }
+.empty-action { color: #64748b; font-size: .9rem; margin: 0; }
+
+/* Filter bar (AC-34) */
+.filter-bar { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1rem; align-items: center; }
+.filter-bar .filter-q { flex: 1; min-width: 160px; margin-bottom: 0; }
+.filter-bar select { background: #0f172a; border: 1px solid #334155; border-radius: 6px; color: #e2e8f0; padding: .45rem .6rem; font-size: .875rem; }
+.btn-sm { background: #1e40af; color: #fff; border: none; border-radius: 6px; padding: .4rem .9rem; font-size: .875rem; cursor: pointer; }
+.btn-sm:hover { background: #2563eb; }
+
+/* Cancel button (AC-33) */
+.btn-cancel { background: #7f1d1d; color: #fca5a5; border: none; border-radius: 6px; padding: .5rem 1.25rem; font-size: .9rem; cursor: pointer; margin-top: .5rem; }
+.btn-cancel:hover { background: #991b1b; }
+
+/* Marker preset grid (AC-32) */
+.preset-grid { display: flex; flex-wrap: wrap; gap: .5rem; margin: .75rem 0; }
+.preset-label { display: flex; align-items: center; gap: .4rem; background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: .35rem .75rem; font-size: .875rem; cursor: pointer; color: #94a3b8; }
+.preset-label:hover { border-color: #38bdf8; color: #e2e8f0; }
+.preset-label input { accent-color: #38bdf8; }
+
+/* Help view (AC-36..AC-39) */
+.qs-list { display: flex; flex-direction: column; gap: .75rem; }
+.qs-step { display: flex; gap: 1rem; align-items: flex-start; }
+.qs-num { background: #1e40af; color: #fff; border-radius: 50%; min-width: 2rem; height: 2rem; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .9rem; flex-shrink: 0; }
+.qs-body { flex: 1; }
+.qs-body p { margin: .25rem 0 .35rem; color: #94a3b8; font-size: .9rem; }
+.qs-cmd { display: block; background: #0f172a; border: 1px solid #334155; border-radius: 5px; padding: .4rem .75rem; font-size: .85rem; color: #7dd3fc; margin-top: .25rem; word-break: break-all; }
+
+.infra-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: .75rem; }
+.infra-item { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: .75rem 1rem; }
+.infra-name { font-weight: 600; color: #e2e8f0; margin-bottom: .25rem; }
+.infra-purpose { font-size: .85rem; color: #94a3b8; margin-bottom: .35rem; }
+.infra-note { font-size: .78rem; color: #475569; }
+
+.badge-mode { background: #1e293b; color: #94a3b8; }

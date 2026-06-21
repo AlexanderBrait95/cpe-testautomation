@@ -85,3 +85,14 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# Autopilot-Sicherheit: niemals Secrets/Artefakte pushen
+secrets.env
+*.key
+*.pem
+*.pfx
+*.p12
+id_rsa
+id_ed25519
+node_modules/
+.autopilot/usage.jsonl

@@ -96,6 +96,23 @@ class DashboardRunner:
                 return self._output_xml
             return None
 
+    def cancel(self) -> bool:
+        """Cancel the active run. Returns True if cancelled, False when no run is active."""
+        with self._lock:
+            if self._status != "running":
+                return False
+            proc = self._process
+            self._status = "cancelled"
+
+        if proc is not None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=3.0)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+        return True
+
     def is_busy(self) -> bool:
         with self._lock:
             return self._status == "running"
@@ -112,14 +129,14 @@ class DashboardRunner:
         for line in proc.stdout:
             line = line.rstrip()
             with self._lock:
+                if self._status == "cancelled":
+                    break
                 self._lines.append(line)
                 self._update_counts(line)
         proc.wait()
         with self._lock:
-            self._status = "finished" if proc.returncode == 0 else "failed"
-            if self._tmp_dir and proc.returncode != 0:
-                # Keep tmp dir for inspection; it's cleaned eventually by GC.
-                pass
+            if self._status != "cancelled":
+                self._status = "finished" if proc.returncode == 0 else "failed"
 
     def _update_counts(self, line: str) -> None:
         # Naively parse pytest summary lines like "3 passed, 1 failed"

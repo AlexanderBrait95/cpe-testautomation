@@ -75,3 +75,39 @@ wörtlichen §14-Text hinaus, jeweils zur headless-Verifizierbarkeit/Sicherheit:
   fordert „Tests für das Backend im headless Gate", nennt aber kein Qualitätsziel; konsistent zum
   bestehenden Gate (AC-17/AC-18) auf das Dashboard ausgedehnt. Vanilla-JS bewusst ausgenommen
   (kein JS-Testharness im Scope).
+
+## SPEC-Phase, Nachschärfung (2026-06-22) — §15 Dashboard v2 (requirement.md v1.1)
+
+Anlass: User-Feedback v1.1 — das abgenommene §14-Dashboard sei „nur eine Ansicht", erfülle die
+alte Spec, sei aber real nicht voll bedienbar und erkläre dem Nutzer nicht, wie real getestet wird
+(Hardware-Anschluss, Infrastruktur, Bedienung). Das ist eine **Purpose-Lücke**: §14 ist wörtlich
+erfüllt (6 Views, Run-Start), das Zielbild „handover-reif bedienbar + selbsterklärend" aber nicht.
+Bestehende Spec/AC bleiben unangetastet; ergänzt werden nur die gemeldeten Lücken als messbare AC.
+
+- **AC-32/AC-34/AC-35 — Operations-Console (Steuern statt nur Ansehen).** Begründung: „soll dazu
+  dienen die Testautomation komplett zu bedienen". Run-Steuerung per Preset, Filter/Sortierung und
+  Export sind die von Test-Dashboards erwarteten Schlüsselaktionen (research.md Befund 1). Keine neue
+  Test-Fachlichkeit — nur Bedienoberfläche auf vorhandene Engine/Artefakte.
+- **AC-33 — Run-Abbruch.** Begründung: vollständige Bedienbarkeit erfordert, einen laufenden Run
+  auch beenden zu können; ohne Abbruch ist die Steuerung halb. Sauberer Terminate, headless mit
+  Fake-Command prüfbar.
+- **AC-36..AC-39 — Eingebautes Onboarding (Kern des Feedbacks).** Begründung: wörtliches Zitat
+  „Dem User gegenüber wird nicht erklärt wie man testet → welche Hardware wie anschließen, welche
+  Infrastruktur, wie bedient man das Programm". Umgesetzt als eigene Hilfe-View + `GET /api/help`,
+  datengetrieben aus den real definierten HAL-Interfaces und Infra-Diensten (Vollständigkeits-
+  Meta-Test gegen `hal/base.py` → kein Doku-Drift). In-App-Guidance statt PDF ist Best-Practice
+  (research.md Befund 2/3). Inhalte stammen aus vorhandener Doku/`testbed.yaml` — kein neuer Scope.
+- **AC-40..AC-42 — Handover-reife UX.** Begründung: „bis sie einem User übergeben werden kann".
+  Handlungsleitende Leerzustände, Tooltips und lesbare Fehlertexte (keine Tracebacks) sind die
+  Mindest-UX-Schicht, damit ein Nutzer ohne Vorwissen die nächste Aktion findet (research.md Befund
+  1/2). Headless über statische Asset-Meta-Tests + TestClient-Fehlerantwort-Form prüfbar.
+- **AC-43 — Testbed-Bedienung/Validierung aus UI.** Begründung: „welche Infrastruktur braucht man,
+  wie ist der Stand" — Testbed-View macht sim/real-Status sichtbar und erlaubt Inventar-Validierung
+  aus der UI (Wiederverwendung des vorhandenen `inventory-validate`). Keine neue Logik, nur Exposition.
+- **AC-44 — Gate-Konformität.** Begründung: hält die Erweiterung an dasselbe ruff/mypy/Coverage/
+  Offline-Gate wie §14; verhindert Qualitätsregression. Vanilla-JS bleibt bewusst ohne JS-Testharness.
+
+Bewusst NICHT aufgenommen (Anti-Bloat): keine Authentifizierung/Mehrbenutzer (Loopback-Single-User
+bleibt, §14.1), kein Live-Hardware-Steuerpanel (physische Anteile bleiben hardware-deferred), keine
+Build-Toolchain/Framework-Migration (Vanilla bleibt). Scope strikt auf die gemeldete Purpose-Lücke
+„bedienbar + selbsterklärend + handover-reif" begrenzt.

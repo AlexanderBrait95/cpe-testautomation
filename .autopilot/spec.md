@@ -1,7 +1,8 @@
 # Spezifikation: CPE Hardware- & Software-Acceptance-Test-Automation
 
-**Version:** 1.1 (Spec abgeleitet aus requirement.md v1.0 + §14 Web-Dashboard)
-**Status:** SPEC — Framework-Kern (P1) abgenommen; aktive Erweiterung: §14 Web-Dashboard
+**Version:** 1.2 (Spec abgeleitet aus requirement.md v1.0 + §14 Web-Dashboard + §15 Dashboard v2)
+**Status:** SPEC — Framework-Kern (P1) + §14 Dashboard abgenommen; aktive Erweiterung: §15 Dashboard v2
+(Bedien- & Onboarding-Console — Nachschärfung aus requirement.md v1.1 „Dashboard ist nur Ansicht")
 **Sprache Code/Doku:** Englisch im Code, Deutsch in Betriebs-/Onboarding-Doku zulässig.
 
 ---
@@ -310,6 +311,12 @@ Der Build gilt als „grün", wenn ALLE folgenden Kriterien erfüllt sind. Jedes
   Leerzustand, Run-Start-Flow mit Fake-Command, Sicherheit/Offline, Fehlerfälle, Lint/Typen/Coverage).
   Alle über `tests/dashboard/` (`@headless`) im selben `make verify`-Lauf verifiziert.
 
+**Dashboard v2 (§15) — Bedien- & Onboarding-Console, Done-Gate-relevant, headless**
+- **AC-32..AC-44:** vollständig in §15.4 definiert (Run-Steuerung per Steuerelement, Run-Abbruch,
+  Filter/Sortierung, Export, Hilfe/Onboarding-View mit datengetriebener Hardware-/Infra-Anleitung +
+  Bedien-Quickstart, handlungsleitende Leerzustände, Tooltips, lesbare Fehlertexte, Testbed-Validierung
+  aus der UI, Gate-Konformität). Alle über `tests/dashboard/` (`@headless`) im selben `make verify`-Lauf.
+
 **Globales Gate-Kommando** (eine einzige reproduzierbare Verifikation):
 ```
 make verify   # == ruff + mypy + pytest -m "headless" -n auto --junitxml --cov + report-gen
@@ -407,6 +414,121 @@ einzige Gate und nimmt die `tests/dashboard/`-Suite über `-m "not hardware"` au
 
 ---
 
+## 15. Dashboard v2 — Bedien- & Onboarding-Console (Nachschärfung aus requirement.md v1.1)
+
+### 15.0 Anlass & Zielbild
+Das v1-Dashboard (§14) ist abgenommen, aber **„nur eine Ansicht"**: es zeigt Ergebnisse, lässt den
+Nutzer die Testautomation aber nicht wirklich *bedienen* und erklärt ihm nicht, **wie real getestet
+wird** (welche Hardware wie anschließen, welche Infrastruktur reale Tests brauchen, wie man das
+Programm bedient). requirement.md v1.1 fordert: *„Entwickle die komplette UI nochmal … bis sie einem
+User übergeben werden kann."*
+
+**Zielbild (handover-reif):** Eine Person ohne Vorwissen öffnet `cpe-ta dashboard`, versteht aus der
+UI heraus (a) **wie man bedient**, (b) **was man real anschließen/aufbauen muss**, und kann (c) Tests
+**vollständig steuern** (starten, abbrechen, filtern, exportieren, Testbed prüfen) — ohne externe
+Doku, offline. Die Engine, Doku-Inhalte (`docs/testbed.md`, `deferred-matrix.md`) und `testbed.yaml`
+existieren bereits; v2 macht sie **bedienbar und sichtbar** — **kein neuer Test-Fachscope**.
+
+Architektur-Invariante bleibt: FastAPI-JSON-API + Vanilla-HTML/CSS/JS, **kein Build, keine Node-Deps,
+kein CDN, offline**. Alle neuen Fähigkeiten sind über `fastapi.testclient` + statische Asset-Meta-Tests
+**headless im selben `make verify`-Gate** verifizierbar (Vanilla-JS bleibt nicht coverage-gemessen).
+
+### 15.1 Operations-Console (vollständige Bedienbarkeit)
+- **Run-Steuerung:** Marker-Auswahl als **Presets/Steuerelemente** (smoke / full / regression /
+  headless / `tech_dsl|docsis|pon|fwa`) statt nur Freitext; Run starten, **aktiven Run abbrechen**,
+  vergangenen Run als Re-Run übernehmen.
+- **Filter/Sortierung:** Run-History und Test-Liste filterbar nach Status (passed/failed/skipped/error),
+  Domäne und Freitext; Sortierung nach Zeit/Dauer/Status.
+- **Export:** Report eines Runs aus der UI herunterladbar (JUnit-XML und HTML).
+- **Testbed-Bedienung:** Testbed-View zeigt je Gerät/Dienst **sim- vs. real-Status**; Inventar-
+  Validierung (`cpe-ta inventory-validate`-Äquivalent) aus der UI auslösbar, Ergebnis sichtbar.
+
+### 15.2 Eingebautes Onboarding / Hilfe-View (Kern des Feedbacks)
+Neue **7. Top-Level-View „Hilfe & Setup"**. Inhalte aus dem Daten-Layer (nicht im JS hartkodiert),
+offline gerendert:
+- **Bedien-Quickstart:** Schrittfolge Install → Inventar prüfen → smoke-Run starten → Ergebnisse/
+  Report ansehen → von sim auf real umschalten.
+- **Hardware-Anschluss-Anleitung:** pro HAL-Gerät (Switch, PDU, SerialConsole, RFAttenuator,
+  USBRelay, CPE/DUT) **Zweck** + **wie/wo anschließen** + ob Simulator verfügbar. Datengetrieben aus
+  den real definierten HAL-Interfaces → kein Drift.
+- **Infrastruktur für reale Tests:** Referenzdienste (ACS, RADIUS, DHCP/DNS, SIP/IMS, Traffic-
+  Endpoint, NTP, Fileserver) mit Zweck; Erklärung sim↔real-Umschaltung; Verweis, **warum** bestimmte
+  Tests hardware-deferred sind (aus `deferred-matrix.md`).
+- **Kontextuelle Hilfe:** Tooltips/Hinweise an Schlüsselelementen; **handlungsleitende Leerzustände**
+  (nicht „keine Daten", sondern der nächste sinnvolle Schritt).
+
+### 15.3 Neue/erweiterte API-Routen (headless via TestClient)
+| Route | Zweck |
+|---|---|
+| `POST /api/runs/active/cancel` | aktiven Run sauber beenden (terminate, Status→`cancelled`) |
+| `GET /api/runs?status=&domain=&q=&sort=` | gefilterte/sortierte Run-History |
+| `GET /api/runs/{id}?status=&domain=&q=` | gefilterte Testliste eines Runs |
+| `GET /api/runs/{id}/export?format=junit\|html` | herunterladbares Report-Artefakt |
+| `GET /api/help` | strukturierter Onboarding-Inhalt (Quickstart, Hardware, Infra, Modi) |
+| `POST /api/inventory/validate` | Inventar-Validierung, ok / strukturierte Fehlerliste |
+
+### 15.4 Dashboard-v2-Akzeptanzkriterien (headless, im `make verify`-Gate)
+Bestehende AC-23..AC-31 bleiben gültig und erfüllt. Neu, jeweils maschinell prüfbar:
+
+**Operations-Console**
+- **AC-32 (Run-Steuerung per Steuerelement):** `index.html`/`app.js` bieten **auswählbare Marker-
+  Presets** (mind. smoke, full, regression, headless) statt reiner Freitexteingabe; `POST /api/runs`
+  akzeptiert diese Marker. Meta-Test prüft Vorhandensein der Auswahl-Steuerelemente im Frontend.
+- **AC-33 (Run abbrechen):** `POST /api/runs/active/cancel` beendet den per Fake-Command gestarteten
+  Run sauber → Status `cancelled`, kein Zombie-Prozess; ohne aktiven Run klare `404`/`409`.
+  TestClient verifiziert running→cancelled.
+- **AC-34 (Filter/Sortierung):** `GET /api/runs` und `GET /api/runs/{id}` mit `status`/`domain`/`q`
+  liefern korrekt gefilterte Teilmengen (Assertions gegen Fixture); ohne Filter = vollständige Liste;
+  `sort` ändert die Reihenfolge deterministisch.
+- **AC-35 (Export):** `GET /api/runs/{id}/export?format=junit|html` liefert ein herunterladbares
+  Artefakt mit korrektem `Content-Type` + `Content-Disposition`; unbekannte `run_id` → `404`,
+  unbekanntes Format → `422`.
+
+**Eingebautes Onboarding**
+- **AC-36 (Hilfe-View als 7. Navigationspunkt):** Frontend-Navigation enthält eine eigene
+  „Hilfe & Setup"-View mit eigener Route (`/#/help`); Meta-Test prüft Nav-Eintrag + Routing.
+- **AC-37 (Hardware-Anleitung vollständig & datengetrieben):** `GET /api/help` liefert für **jedes**
+  in `cpe_ta/hal/base.py` definierte HAL-Interface (Switch, PDU, SerialConsole, RFAttenuator,
+  USBRelay, CPE) einen Eintrag mit `purpose` + `connection` + `sim_available`. Meta-Test gleicht die
+  Help-Geräteliste gegen die real definierten Interfaces ab (Vollständigkeit, kein Drift) — fehlt ein
+  Gerät, schlägt der Test fehl.
+- **AC-38 (Infrastruktur + Modus-Erklärung):** `GET /api/help` listet die Referenz-Infra-Dienste
+  (ACS, RADIUS, DHCP/DNS, SIP/IMS, Traffic-Endpoint, NTP, Fileserver) mit Zweck, erklärt sim↔real und
+  verweist auf hardware-deferred. Inhalt stammt aus dem Daten-Layer (nicht im JS hartkodiert);
+  Assertions gegen die erwarteten Dienst-Keys.
+- **AC-39 (Bedien-Quickstart in der UI):** `GET /api/help` enthält einen geordneten, nicht-leeren
+  Quickstart (Install → Inventar prüfen → smoke-Run → Report → sim→real). Meta-Test prüft, dass die
+  Schritte als strukturierte Inhalte ausgeliefert und im Frontend gerendert werden.
+
+**Handover-reife UX**
+- **AC-40 (Handlungsleitende Leerzustände):** Bei leeren Listen rendert das Frontend einen Hinweis
+  mit Handlungsaufforderung (Verweis auf „Run starten"/Hilfe), nicht nur ein leeres Element.
+  Meta-Test prüft den Empty-State-Pfad in `app.js`.
+- **AC-41 (Kontextuelle Hilfe/Tooltips):** Schlüsselelemente (Marker-Auswahl, Run-Button, sim/real-
+  Status) tragen Hilfetexte (`title=`/Tooltip-Elemente); Meta-Test zählt ≥ 5 Hilfetext-Vorkommen in
+  `index.html`/`app.js`.
+- **AC-42 (Verständliche Fehlertexte statt Tracebacks):** Backend liefert bei Fehlern strukturiertes
+  `{detail}` (kein roher Traceback) — TestClient prüft die Fehlerantwort-Form; Frontend besitzt eine
+  zentrale `fetch`-Fehlerbehandlung, die nicht-2xx-Antworten als lesbare Meldung anzeigt (Meta-Test
+  prüft den Fehlerpfad in `app.js`).
+- **AC-43 (Testbed-Bedienung + Validierung aus UI):** Testbed-View zeigt je Gerät/Dienst sim/real-
+  Status; `POST /api/inventory/validate` liefert für gültiges Inventar `ok` und für defektes eine
+  strukturierte Fehlerliste (kein 500), äquivalent zu `cpe-ta inventory-validate`. TestClient-
+  Assertions für gültig **und** ungültig.
+
+**Qualität (konsistent zum bestehenden Gate)**
+- **AC-44 (Gate-Konformität der Erweiterung):** Alle neuen Routen/Inhalte sind unter
+  `tests/dashboard/` (`@headless`) getestet; `ruff check cpe_ta/dashboard tests/dashboard` clean;
+  `mypy --strict` für die neuen/erweiterten typisierten Module (`data.py`, `models.py`, Help-Content-
+  Modul) clean; Dashboard-Backend-Coverage (`cpe_ta/dashboard` ohne `static/`) bleibt ≥ 80 %; der
+  Offline-Nachweis (kein CDN, nur lokale Assets, AC-29) gilt unverändert für alle neuen statischen
+  Assets. `make verify` bleibt das einzige Gate und exit 0.
+
+Diese AC-32..AC-44 erweitern den Done-Gate in §11; `make verify` bleibt unverändert das einzige Gate
+und nimmt die erweiterte `tests/dashboard/`-Suite über `-m "not hardware"` automatisch mit.
+
+---
+
 ## 12. Phasen-Scope für den Autopilot
 
 - **P1 (Done-Gate, dieser Build):** Kern-Framework, HAL+Simulatoren, DUT-Abstraktion+Sim,
@@ -438,3 +560,5 @@ und in `docs/criteria.md`/`docs/testbed.md` als „anzupassen" markiert:
 ```
 _Spec erstellt: 2026-06-21 (Autopilot SPEC-Phase, Iteration 0)._
 _Erweitert: 2026-06-21 (Autopilot SPEC-Phase, Iteration 4) — §14 Web-Dashboard + AC-23..AC-31._
+_Erweitert: 2026-06-22 (Autopilot SPEC-Phase, requirement.md v1.1) — §15 Dashboard v2
+(Bedien- & Onboarding-Console) + AC-32..AC-44._

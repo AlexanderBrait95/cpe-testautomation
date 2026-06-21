@@ -1,97 +1,62 @@
-# VERIFY-Report: CPE Test-Automation Framework (P1 / Done-Gate)
+# Verify-Report — CPE Test-Automation (Iteration 6, unabhaengige Pruefung)
 
-**Datum:** 2026-06-21 · **Phase:** VERIFY (unabhängige Prüfung, read-only)
-**Verdikt:** `clean` — Done-Gate erfüllt.
-**Build-Umgebung:** Python 3.11.15 (brew) mit vollem Toolset. Hinweis: System-`python3` ist 3.9.6
-(ohne `StrEnum`, ruff/mypy/pytest-cov fehlen) — Tests laufen NICHT unter 3.9. Spec §1 fordert
-Python 3.11+ verbindlich; das ist korrekt eingehalten, kein Defekt.
+**Phase:** VERIFY (read-only, frischer Blick)
+**Datum:** 2026-06-21
+**Verdikt:** `clean`
+**Gate-Kommando:** `make verify` → **EXIT 0**
 
-## 1. Testausführung (exakt)
-- `make verify` → **exit 0**, Ausgabe endet mit `=== Verify Gate PASSED ===`.
-  - `ruff check cpe_ta tests` → **All checks passed!**
-  - `mypy --strict cpe_ta/core cpe_ta/hal/base.py` → **Success: no issues found in 10 source files**
-  - `pytest -m "not hardware" -n auto --cov` → **559 passed** (0 fail/error), in ~2.7 s.
-- Zusammensetzung: 417 headless + 142 reine Framework-Unit-Tests (T41-Gate-Umstellung wirksam).
-- `pytest -m headless -n 4` → **417 passed** (echte Parallelität, AC-09).
-- `pytest -m hardware` → **15 skipped, 0 fail** (AC-22).
+## 1. Testergebnis (real ausgefuehrt)
+- `ruff check cpe_ta tests` → **CLEAN** (All checks passed)
+- `mypy --strict cpe_ta/core cpe_ta/hal/base.py` → **no issues** (10 Dateien)
+- `mypy --strict cpe_ta/dashboard/data.py cpe_ta/dashboard/models.py` → **no issues**
+- `pytest -m "not hardware" -n auto --junitxml --cov` → **620 passed, 0 failed**, Coverage **TOTAL 89%**
+- `pytest -m hardware` → **15 skipped, 0 fail** (AC-22 erfuellt)
+- `make verify` ganzheitlich → **EXIT 0**
 
-## 2. Coverage
-- TOTAL: **90 %** (1207 stmts, 118 miss).
-- core + hal gezielt: **98 %** (622 stmts, 13 miss) → AC-18 (≥80 %) klar erfüllt.
-- Unabgedeckt nur die real-Treiber-Pfade (`hal/factory.py` real-Branches 71 %,
-  `dut/drivers/generic.py` 0 %) — per Spec §13/REQ-HW-03 absichtliche Skelette, vom Gate
-  via coverage-omit ausgenommen. Kein Defekt.
+## 2. Akzeptanzkriterien gegen REALEN Code geprueft (Auswahl, mit Beleg)
+- **AC-01..AC-21 (Kern):** Teil der 620 gruenen Tests; Layering-/Determinismus-/Marker-Coverage-Meta-Tests laufen mit.
+- **AC-22 (Hardware-deferred):** `pytest -m hardware` = 15 skipped, kein fail.
+- **AC-23 (CLI):** `python3.11 -m cpe_ta.cli dashboard --help` zeigt Befehl + Optionen, Default-Host `127.0.0.1`, Default-Port 8080.
+- **AC-24 (6 Views):** `create_app()` registriert `/api/overview`, `/api/domains`, `/api/runs`, `/api/runs/{run_id}`, `/api/testbed`, `POST /api/runs` + `/api/runs/active/progress` sowie `/` (Static).
+- **AC-25 (JUnit-Parse korrekt) — vormals GAP-1, jetzt unabhaengig bestaetigt:**
+  `tests/dashboard/test_routes.py:16` liest stabile Fixture `tests/dashboard/fixtures/sample-results.xml`.
+  Eigenstaendiger `ElementTree`-Parse der Fixture ergibt total=10, passed=6, failed=1, skipped=2, error=1 —
+  exakt die Test-Konstanten (`EXPECTED_*`, Zeile 19-23). Keine Bindung mehr an das vom Gate regenerierte
+  `test-results.xml`, kein Hardcode 559/620 (`grep` ohne Treffer). Zirkulaere Kopplung nachweislich aufgehoben.
+- **AC-28/AC-27 (Sicherheit/Run-Start):** Produktiv-Command-Factory `cpe_ta/dashboard/runner.py:22-23` baut
+  `[sys.executable, "-m", "pytest", "-m", markers, "--junitxml=..."]`; `subprocess.Popen(..., shell=False)` (Zeile 62-67).
+  Keine Shell-Interpolation → keine Command-Injection. Marker-Whitelist vorhanden.
+- **AC-29 (Offline):** `grep` ueber `cpe_ta/dashboard/static/**` → keine externen `http(s)://`/CDN-Referenzen
+  (nur Kommentare "no CDN").
+- **AC-31 (Lint/Typen/Coverage Dashboard):** ruff/mypy clean; Dashboard-Subset (app 93%, data 81%, models 100%,
+  runner 83%) ~87% ≥ 80%.
 
-## 3. Akzeptanzkriterien (AC-01 … AC-22) gegen REALEN Code/Tests
-- **AC-01** Layering: `tests/framework/test_layering.py` grün — keine Hardware-/Vendor-Imports in Businesslogik.
-- **AC-02** HAL-Vollständigkeit: `test_hal_completeness.py` grün — je Interface real-Skelett + Sim.
-- **AC-03** `pytest tests/hal -m headless` Teil der 417 grünen headless-Tests.
-- **AC-04** Determinismus: `test_determinism.py` grün (identischer Ergebnis-Hash).
-- **AC-05** Wiring-Map inkl. Fehlerfall: `tests/hal/test_inventory.py` grün.
-- **AC-06** real↔sim ohne Teständerung: `test_factory_switch.py` grün.
-- **AC-07** Tag-/Capability-Selektion + Skip: `test_selection.py` grün.
-- **AC-08** Idempotenz/Reorder: `test_reorder.py` grün.
-- **AC-09** Parallelität: `-n 4 -m headless` 417 passed, kein Cross-Talk.
-- **AC-10** TR-098↔TR-181: `test_datamodel_mapping.py` grün.
-- **AC-11** criteria.py: `test_criteria.py` grün (Aggregat/Schwelle/fehlende Schwelle→skip).
-- **AC-12** Domänen-Coverage-Meta: `test_domain_coverage.py` grün (LAN, WiFi, QoS, WAN, DHCP,
-  Multicast, IPv6, Security, ACS je ≥1 headless-Test).
-- **AC-13** ACS-RPC-Suite: `tests/acs/test_cwmp_rpc.py` (141 Z., echte RPC-Assertions) grün.
-- **AC-14** IPv6 v4/v6/dualstack-Parametrisierung grün.
-- **AC-15** Report: JUnit-XML valide erzeugt + HTML generiert; PNG-Charts via `test_report.py`
-  (charts.py 100 % cov). Direkter `cpe-ta report --input out.xml` → HTML geschrieben.
-- **AC-16** SQLite-Trend über ≥2 Firmware-Stände: `test_results_db.py` grün (results.py 100 %).
-- **AC-17** ruff + mypy --strict clean.
-- **AC-18** core+hal Coverage 98 %.
-- **AC-19** `cpe-ta inventory-validate testbed.example.yaml` exit 0; defektes Inventar exit 1.
-- **AC-20** `.gitlab-ci.yml` valides YAML + Regression-/Nightly-Stage; `Jenkinsfile` mit Regression.
-- **AC-21** README + 5 docs/*.md vorhanden (architecture, testbed, deferred-matrix, writing-tests, criteria).
-- **AC-22** 15 `@hardware`-Tests, alle skipped, vollständig in `docs/deferred-matrix.md`.
+## 3. Adversariale Suche nach neuen Luecken
+- **GAP-1-Regression?** Gezielt geprueft: Test ist von Gate-Artefakt entkoppelt, Fixture-Zaehler unabhaengig
+  reproduziert. Kein Rueckfall.
+- **Run-Start nur im Test nutzbar?** Nein — Default-Factory startet echtes pytest; Fake-Command wird ausschliesslich
+  in Tests injiziert. Produktivpfad real.
+- **Determinismus/Parallelitaet:** -n auto Lauf gruen, keine Cross-Talk-Fehler.
+- Keine offenen blockierenden Befunde.
 
-## 4. Verify-Lücken aus Vorrunde (Gruppe Z)
-- **T41 (Gap 1, MEDIUM) — GESCHLOSSEN:** Gate auf `-m "not hardware"` umgestellt; die 142
-  Framework-Unit-Tests (criteria/selection/config/errors/inventory/cli) laufen jetzt im Gate mit
-  (559 statt 417). `pytest -m hardware` bleibt rein skipped — AC-22 ungebrochen.
-- **T42 (Gap 2, LOW) — GESCHLOSSEN:** `test_fw_flash_real`/`test_fw_rollback_real` als „geplant
-  (P2)" markiert; die 15 in der Matrix gelisteten Tests entsprechen 1:1 den 15 realen
-  `@hardware`-Testfunktionen (`pytest -m hardware --collect-only`). Keine Geister-Einträge.
+## 4. Fitness for Purpose (gegen requirement.md §14 — die eigentliche Absicht)
+Das Requirement §14 fordert ein **lokal betreibbares Web-Dashboard**, das Testergebnisse im Browser darstellt
+und Test-Runs aus dem Browser startet. Bewertung der realen Einsetzbarkeit:
+- Ein Nutzer auf dem Control-Host kann `cpe-ta dashboard` starten (Loopback, offline, kein Build/Node).
+- Alle 6 in §14.2 geforderten Views sind als JSON-API + Vanilla-Frontend real bedienbar; `test-results.xml` und
+  SQLite-ResultsDB werden gelesen.
+- Der Run-Start-Flow ist **produktiv funktional** (echter pytest-Subprocess, Live-Progress per Polling, danach in
+  History sichtbar) — kein reines Spec-Erfuellen-auf-dem-Papier.
+- Der breitere Requirement-Rahmen (physisches CPE-Testlabor) ist per Spec-Leitentscheidung §0 bewusst auf
+  Framework + Simulatoren + Testfaelle skopiert; physische Anteile sind sauber als hardware-deferred dokumentiert
+  und blockieren den Done-Gate korrekterweise nicht.
+- **Ergebnis:** Ziel ist nicht nur woertlich, sondern sinnvoll und einsetzbar erfuellt. **Keine purpose-Luecke.**
 
-## 5. Adversariale Suche nach neuen Lücken
-- Platzhalter-Tests? Nein — kein `assert True`-Stub (einziger Treffer ist ein Kommentar, der das
-  ausschließt). Domänen-Tests enthalten echte Assertions gegen Sim-Zustand/RPC-Rückgaben.
-- Strict-Markers aktiv (`--strict-markers`) → keine vertippten Marker, die Tests stumm deselektieren.
-- Determinismus + Reorder + Parallel-Isolation meta-getestet → keine versteckte Reihenfolge-/
-  Cross-Talk-Abhängigkeit.
-- Secrets-Klartext-Grep Teil von `test_layering.py`.
-- Kein produktionsbrechender Fund auf Framework-Ebene.
+## 5. Hardware-Deferred (nicht blockierend)
+Architektonisch erwartet, headless nicht testbar — siehe `hardware_deferred[]` in verify-report.json
+(Access-Tech DSL/DOCSIS/PON/FWA, WiFi-RF, Stress/Soak-Langlauf, VoIP-Audio/T.38, USB-Medien, realer Firmware-Flash).
+Alle in `docs/deferred-matrix.md` gemappt; `pytest -m hardware` = 15 skipped.
 
-## 6. Fitness for Purpose (gegen requirement.md v1.0)
-**Urteil: erfüllt für den P1-Scope, real einsetzbar als Framework-Fundament.**
-- Das Requirement beschreibt ein physisches Testlabor. Die Spec hat das architektonisch korrekt
-  aufgelöst: Businesslogik importiert nie Hardware-Libs, jedes Interface hat realen Treiber **und**
-  deterministischen Simulator; der Done-Gate ist headless verifizierbar, physische Tests sind
-  capability-übersprungen und in der Deferred-Matrix dokumentiert.
-- Ein echter Nutzer erhält damit ein lauffähiges, abnahmefähiges Framework: Runner, Tag-/Capability-
-  Selektion, RFC-2544/6349-Methodik-Engine, HAL/DUT/Infra-Abstraktion mit funktionierenden
-  Simulatoren, JUnit/HTML/PNG-Reporting, SQLite-Trend-DB, CI-Templates, Onboarding-Doku und eine
-  repräsentative, grün laufende headless-Testbibliothek über alle P1-Domänen.
-- **Bewusste, ehrlich offengelegte Grenze (KEIN Gap):** Für den Einsatz an echter Hardware müssen
-  die real-Treiber-Skelette (`hal/drivers/*`, `infra/real/*`, `dut/drivers/generic.py`) noch
-  implementiert werden. Das ist explizit P1-Scope-Grenze (Spec §13, REQ-HW-03) mit dokumentierter
-  Erweiterungsstelle — keine falsche „Done"-Behauptung, kein Nutzbarkeits-Blocker für das erklärte
-  P1-Zielbild (Framework + Simulatoren + headless-Tests).
-- Keine purpose-Lücke zu melden: das Zielbild der Spec ist weder zu eng noch überzogen; es deckt
-  die eigentliche Absicht „in-house Abnahme-Framework, Testschreiben statt Infrastruktur-Bau" real ab.
-
-## 7. Hardware-Deferred (nicht blockierend)
-15 `@hardware`-Tests, sauber skipped, vollständig in `docs/deferred-matrix.md` auf benötigte
-Hardware gemappt:
-- Access-Tech: DSL-Sync, DOCSIS-Channel-Lock, PON-Registrierung/RX-Power/Dying-Gasp, FWA-APN.
-- WiFi-RF: RF-Durchsatz, 802.11r-Roaming, DFS-Radar.
-- Stress/Soak: 24h-Soak, WiFi+LAN+Voice-Langlauf.
-- VoIP: MTC-Call, T.38-Fax. · USB: Samba, DLNA.
-- Firmware-Flash real: als „geplant P2" markiert (Tests bewusst noch nicht implementiert).
-
-## 8. Fazit
-Done-Gate **GRÜN**. Tests grün, spec_coverage **complete**, keine Gaps, keine purpose-Lücke.
-hardware_deferred enthält Einträge — blockiert den Done-Gate per Spec §0 nicht.
+## Fazit
+Done-Gate vollstaendig erfuellt: Tests gruen, Spec-Coverage complete, keine gaps, keine purpose-Luecke.
+**Verdikt: clean.**
