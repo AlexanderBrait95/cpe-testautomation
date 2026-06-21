@@ -18,6 +18,9 @@ dependencies = [
     "matplotlib>=3.7",
     "sqlalchemy>=2.0",
     "coverage>=7.3",
+    "fastapi>=0.104",
+    "uvicorn[standard]>=0.24",
+    "httpx>=0.25",
 ]
 
 [project.optional-dependencies]
@@ -85,7 +88,7 @@ addopts = "--strict-markers"
 # ---------------------------------------------------------------------------
 [tool.coverage.run]
 source = ["cpe_ta"]
-omit = ["cpe_ta/hal/drivers/*", "cpe_ta/infra/real/*"]
+omit = ["cpe_ta/hal/drivers/*", "cpe_ta/infra/real/*", "cpe_ta/dashboard/static/*"]
 
 [tool.coverage.report]
 show_missing = true

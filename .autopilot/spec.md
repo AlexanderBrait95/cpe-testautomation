@@ -1,7 +1,7 @@
 # Spezifikation: CPE Hardware- & Software-Acceptance-Test-Automation
 
-**Version:** 1.0 (Spec abgeleitet aus requirement.md v1.0)
-**Status:** SPEC final für Build-Phase P1
+**Version:** 1.1 (Spec abgeleitet aus requirement.md v1.0 + §14 Web-Dashboard)
+**Status:** SPEC — Framework-Kern (P1) abgenommen; aktive Erweiterung: §14 Web-Dashboard
 **Sprache Code/Doku:** Englisch im Code, Deutsch in Betriebs-/Onboarding-Doku zulässig.
 
 ---
@@ -50,6 +50,9 @@ Daraus folgt die Aufteilung des Done-Gates:
 | Lint/Typen | `ruff` + `mypy --strict` (Kernmodule) | Qualitäts-Gate |
 | Tests des Frameworks | `pytest` (Meta-Tests) + `coverage` | siehe Done-Gate |
 | CI | GitLab-CI- + Jenkinsfile-Templates | REQ-RPT-04 |
+| Dashboard-Backend | `FastAPI` + `uvicorn` | §14.1 — passt zur Python-Codebasis, JSON-API + Static-Serving |
+| Dashboard-Frontend | Vanilla HTML/CSS/JS (kein Build, keine Node-Deps, kein CDN) | §14.1 — offline-fähig auf Control-Host |
+| Dashboard-Tests | `fastapi.testclient` (Starlette/httpx) | Routen headless im Gate testbar, kein Live-Server nötig |
 
 Begründung Stack-Fokus: Der Autopilot baut **Framework + Simulatoren + Testfälle**, nicht das
 physische Labor. Reale Treiber werden mit klarem Interface und Stub-Verhalten implementiert, aber
@@ -86,9 +89,16 @@ cpe_ta/                         # Python-Package (Framework-Kern)
     sim/                        # Simulatoren je Referenzdienst
   report/
     junit.py  html.py  charts.py  pdf.py
-  cli.py                        # Einstiegspunkt: cpe-ta run/list/report/inventory-validate
+  dashboard/                    # §14 Web-Dashboard (eigenständige Komponente)
+    app.py                      # FastAPI-App: Static-Mount + JSON-API-Routen
+    data.py                     # Daten-Aggregation: JUnit-XML-Parse + ResultsDB -> View-Modelle
+    runner.py                   # Run-Start als Subprocess (pytest), Status/Progress-Tracking
+    models.py                   # Pydantic Response-Modelle (Overview, RunSummary, TestDetail, ...)
+    static/                     # index.html, app.css, app.js (vanilla, kein CDN), nav für 6 Views
+  cli.py                        # Einstiegspunkt: cpe-ta run/list/report/inventory-validate/dashboard
 tests/                          # Testfall-Bibliothek (pytest), nach Domäne gegliedert
   hal/ dut/ lan/ wifi/ qos/ wan/ dhcp/ multicast/ security/ acs/ ipv6/ stress/ voip/ usb/ tech/
+  dashboard/                    # §14: FastAPI-Routen + Daten-Layer (headless, TestClient)
   framework/                    # Meta-Tests: testen das Framework selbst
 conftest.py                     # Fixtures: testbed, dut, infra, criteria; real|sim-Schalter
 testbed.example.yaml            # Beispiel-Inventar + Wiring-Map
@@ -295,6 +305,11 @@ Der Build gilt als „grün", wenn ALLE folgenden Kriterien erfüllt sind. Jedes
   fehlender Hardware sauber übersprungen (kein fail), nachgewiesen durch `pytest -m hardware`
   → alle `skipped`.
 
+**Web-Dashboard (§14) — Done-Gate-relevant, headless**
+- **AC-23..AC-31:** vollständig in §14.5 definiert (CLI-Befehl, 6 View-Routen, JUnit-Parse-Korrektheit,
+  Leerzustand, Run-Start-Flow mit Fake-Command, Sicherheit/Offline, Fehlerfälle, Lint/Typen/Coverage).
+  Alle über `tests/dashboard/` (`@headless`) im selben `make verify`-Lauf verifiziert.
+
 **Globales Gate-Kommando** (eine einzige reproduzierbare Verifikation):
 ```
 make verify   # == ruff + mypy + pytest -m "headless" -n auto --junitxml --cov + report-gen
@@ -303,12 +318,102 @@ make verify   # == ruff + mypy + pytest -m "headless" -n auto --junitxml --cov +
 
 ---
 
+## 14. Web-Dashboard (§14 Requirement — aktive P1-Erweiterung)
+
+Eigenständige Komponente `cpe_ta/dashboard/`. **FastAPI-JSON-API + Vanilla-HTML-Frontend**,
+offline lauffähig auf dem Control-Host. Liest die vorhandene `test-results.xml` (JUnit) und die
+SQLite `ResultsDB` (`cpe_ta/core/results.py`, Tabellen `runs`/`test_results`, Methoden
+`get_runs`, `get_results_for_run`, `get_trend`); kein DB-Migrationszwang, JUnit-Parse genügt für
+den Sofort-Betrieb.
+
+### 14.1 Betrieb & Architektur
+- **CLI:** `cpe-ta dashboard` (Typer-`@app.command("dashboard")`, analog zu `run`/`report`),
+  Optionen `--host` (Default `127.0.0.1`), `--port` (Default `8080`), `--results` (Pfad zur
+  JUnit-XML, Default `test-results.xml`), `--db` (Default Projekt-DB).
+- **Sicherheit:** Default-Bind auf **Loopback** (`127.0.0.1`), nicht `0.0.0.0` → keine
+  ungewollte Netz-Exposition. Run-Start nimmt nur **validierte Marker-Ausdrücke** (Whitelist-
+  Pattern, z. B. `^[a-zA-Z0-9_ ()andort-]+$`); pytest wird als **Argument-Liste** gestartet
+  (`shell=False`), niemals via Shell-String → keine Command-Injection. Keine Secrets in API-Responses.
+- **Frontend:** statisch aus `dashboard/static/` (HTML/CSS/JS), **keine externen CDN-/Font-/JS-
+  Referenzen** (offline). Navigation deckt die 6 Views ab; Daten werden per `fetch` von der
+  JSON-API geholt. Charts (Domain-Balken) clientseitig mit Vanilla-Canvas/SVG, keine Chart-Lib.
+- **Backend↔Daten:** `dashboard/data.py` kapselt Lesezugriff (JUnit-Parse + DB) hinter reinen,
+  unit-testbaren Funktionen, die `dashboard/models.py`-Pydantic-Modelle liefern. Die FastAPI-App
+  importiert **nur** diesen Daten-Layer und `runner.py`, nie pytest-Interna direkt.
+
+### 14.2 Views & API-Routen (6 navigierbare Views)
+Jede View wird durch eine JSON-Route bedient; das Frontend rendert sie. Drill-down
+„Einzeltest" ist Teil der Run-Detail-View (gleiche Route, Detailfeld) und zählt nicht als 7. View.
+
+| # | View | Frontend-Pfad | JSON-API | Inhalt (§14.2) |
+|---|---|---|---|---|
+| 1 | Overview | `/` | `GET /api/overview` | Passed/Failed/Skipped/Error-Summe, letzter Run (Zeit, Dauer, Git-SHA), Domain-Schnellzugriff |
+| 2 | Domains | `/#/domains` | `GET /api/domains` | je Domäne Pass/Fail-Quote (Balken), Klick→gefilterte Testliste |
+| 3 | Run-History | `/#/runs` | `GET /api/runs` | Tabelle aller Runs: Zeit, Dauer, P/F/S-Zähler, Git-SHA |
+| 4 | Run-Detail | `/#/runs/{run_id}` | `GET /api/runs/{run_id}` | alle Tests des Runs (Status-Icon, Name, Domain, Dauer); enthält Einzeltest-Detail (Message/Stacktrace/Parametrisierung bei failed) |
+| 5 | Testbed-Status | `/#/testbed` | `GET /api/testbed` | geladenes Inventory aus `testbed.yaml`: DUT, HAL-Devices, Services, Verbindungsstatus (sim/real) |
+| 6 | Run starten | `/#/start` | `POST /api/runs` + `GET /api/runs/active/progress` (Polling) bzw. `GET /api/runs/active/stream` (SSE) | Marker-Selektion, Run-Button, Live-Fortschritt, danach in History sichtbar |
+
+### 14.3 Run-Start (Subprocess + Live-Fortschritt)
+- `POST /api/runs` mit `{ "markers": "headless and smoke" }` validiert die Marker, startet
+  `pytest -m "<markers>" --junitxml=<tmp>` als **Hintergrund-Subprocess** und liefert sofort eine
+  `run_id`/`status=running`. Nur **ein** aktiver Run gleichzeitig → zweiter Start `409 busy`.
+- Fortschritt über **Polling** (`/active/progress` → `{status, started, lines_tail, counts}`) ODER
+  **SSE** (`/active/stream`). Nach Abschluss wird das JUnit-Ergebnis geparst, in der History/DB
+  sichtbar, `status=finished|failed`.
+- Der Subprocess-Aufruf ist hinter `runner.py` mit einer **injizierbaren Command-Factory**
+  abstrahiert, sodass Tests einen schnellen Fake-Befehl (z. B. `python -c …`, der eine
+  Mini-JUnit-XML schreibt) einschleusen — der Done-Gate braucht **keinen** echten langen pytest-Lauf.
+
+### 14.4 Edge-Cases (Pflicht)
+- Keine `test-results.xml` und leere DB → alle Routen liefern `200` mit leeren Strukturen; Frontend
+  zeigt „Keine Daten", **keine** 500er/Tracebacks.
+- Unbekannte `run_id` → `404` mit klarer Meldung.
+- Defekte/teilweise JUnit-XML → tolerantes Parsen, überspringt kaputte Cases mit Warnung, kein Crash.
+- Run-Start mit ungültigem Marker-Ausdruck → `422`/`400`, kein Subprocess.
+- Belegter Port beim `dashboard`-Start → klare Fehlermeldung, Exit ≠ 0 (kein stiller Hang).
+- Fehlende/ungültige `testbed.yaml` → Testbed-View meldet das als Status, Rest des Dashboards bleibt nutzbar.
+
+### 14.5 Dashboard-Akzeptanzkriterien (headless, im `make verify`-Gate)
+Alle Routen werden mit `fastapi.testclient.TestClient` getestet (kein Live-Server nötig); Marker
+`@headless`, daher Teil von `pytest -m "not hardware"`.
+
+- **AC-23:** `cpe-ta dashboard --help` zeigt den Befehl; App-Factory `create_app()` instanziiert die
+  FastAPI-App fehlerfrei (importierbar ohne laufenden Server).
+- **AC-24:** Alle **6 View-Routen** liefern bei vorhandener `test-results.xml` `200` und valides,
+  schema-konformes JSON (`/api/overview`, `/api/domains`, `/api/runs`, `/api/runs/{id}`,
+  `/api/testbed`, `POST /api/runs`-Pfad als Endpoint vorhanden).
+- **AC-25:** Die mitgelieferte Beispiel-/reale `test-results.xml` wird korrekt eingelesen: Overview-
+  Summen (passed/failed/skipped/error) und Domain-Aggregation stimmen mit dem XML-Inhalt überein
+  (Assertion gegen erwartete Zähler).
+- **AC-26:** Leerer Zustand (keine XML, leere DB) → alle GET-Routen `200` mit leeren Listen/Null-
+  Summen, kein 500 (Edge-Case §14.4).
+- **AC-27:** Run-Start-Flow headless: `POST /api/runs` mit Fake-Command-Factory startet, `progress`-
+  Route zeigt `running`→`finished`, danach erscheint der neue Run in `GET /api/runs`. Zweiter
+  paralleler Start → `409`.
+- **AC-28:** Sicherheit: ungültiger Marker-Ausdruck → kein Subprocess, `4xx`; Subprocess wird mit
+  Argument-Liste (`shell=False`) gestartet (Test prüft, dass die Command-Factory eine Liste erhält,
+  kein Shell-String). Default-Host ist `127.0.0.1`.
+- **AC-29:** Offline-Nachweis: Meta-Test grep't `dashboard/static/**` → **keine** `http://`/`https://`-
+  Referenzen auf externe Hosts (kein CDN); `index.html` lädt nur lokale `app.css`/`app.js`.
+- **AC-30:** Unbekannte `run_id` → `404`; defekte JUnit-XML → tolerantes Parsen ohne Crash (Test mit
+  absichtlich kaputter XML).
+- **AC-31:** `ruff check cpe_ta/dashboard tests/dashboard` clean; `mypy --strict cpe_ta/dashboard/data.py
+  cpe_ta/dashboard/models.py` clean. Backend-Coverage (`cpe_ta/dashboard` ohne `static/`) ≥ 80 %.
+  (Vanilla-JS ist nicht coverage-gemessen — kein JS-Testharness, bewusst.)
+
+Diese AC-23..AC-31 erweitern den Done-Gate in §11; das bestehende `make verify`-Kommando bleibt das
+einzige Gate und nimmt die `tests/dashboard/`-Suite über `-m "not hardware"` automatisch mit.
+
+---
+
 ## 12. Phasen-Scope für den Autopilot
 
 - **P1 (Done-Gate, dieser Build):** Kern-Framework, HAL+Simulatoren, DUT-Abstraktion+Sim,
   Referenz-Infra-Abstraktion+Sim, Methodik-Engine, Reporting/DB/Charts, headless-Testfälle der
   P1-Domänen (LAN, WiFi-Logik, QoS-Basis, WAN, DHCP/Options/Subnetze, Multicast, IPv6-Basis,
-  Security-Scan+EN-18031-Engine, ACS/CWMP), CI-Templates, Doku, Deferred-Matrix.
+  Security-Scan+EN-18031-Engine, ACS/CWMP), CI-Templates, Doku, Deferred-Matrix,
+  **Web-Dashboard (§14): FastAPI-API + Vanilla-HTML-UI, 6 Views, Run-Start, headless getestet**.
 - **P2 (Roadmap, Stubs+Marker erlaubt, nicht Gate-blockierend):** erweiterte WiFi (Roaming/Mesh/
   DFS), Latenzmetriken/Bufferbloat, Stress/Soak-Langlauf, DHCP-Pool-Stress real, USB-Medien, VoIP,
   LED, zugangsspezifische Tests (DSL/DOCSIS/PON physisch), EN-18031 vollständiges Mapping.
@@ -332,3 +437,4 @@ und in `docs/criteria.md`/`docs/testbed.md` als „anzupassen" markiert:
 ```
 ```
 _Spec erstellt: 2026-06-21 (Autopilot SPEC-Phase, Iteration 0)._
+_Erweitert: 2026-06-21 (Autopilot SPEC-Phase, Iteration 4) — §14 Web-Dashboard + AC-23..AC-31._

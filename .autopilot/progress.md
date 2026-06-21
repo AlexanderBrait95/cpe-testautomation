@@ -2,7 +2,7 @@
 
 **Phase:** BUILD  
 **Gestartet:** 2026-06-21  
-**Stand:** In Arbeit
+**Stand:** Dashboard vollständig implementiert
 
 ## Gruppe A — Projekt-Skelett & Tooling
 - [x] T01 — Projekt-Bootstrap & Build-Tooling
@@ -65,9 +65,33 @@
 - [x] T40 — make verify Gate-Orchestrierung
 
 ## Gruppe Z — Verify-Lücken
-- [x] T41 — Gate deckt Framework-Unit-Tests ab (Gap 1, MEDIUM) — Gate auf `-m "not hardware"` umgestellt; 559 Tests (417 headless + 142 Unit), Coverage 90%
-- [x] T42 — Deferred-Matrix bereinigen (Gap 2, LOW) — `test_fw_flash_real` / `test_fw_rollback_real` als "geplant (P2)" markiert; 15 reale @hardware-Tests in Matrix
+- [x] T41 — Gate deckt Framework-Unit-Tests ab
+- [x] T42 — Deferred-Matrix bereinigen
+
+## Gruppe DA — Dashboard-Fundament
+- [x] T-D01 — Dashboard-Dependencies & Package-Skelett (fastapi/uvicorn/httpx in pyproject.toml + requirements.txt; cpe_ta/dashboard/ angelegt)
+- [x] T-D02 — Pydantic Response-Modelle models.py (OverviewModel, DomainStat, RunSummary, RunDetail, TestEntry, TestbedStatus, RunStartRequest, RunProgress)
+
+## Gruppe DB — Daten-Layer
+- [x] T-D03 — JUnit-XML-Parser + Domain-Aggregation (data.py: parse_junit, overview, domain_stats; tolerantes Parsen; Leerzustand)
+- [x] T-D04 — DB-Lesezugriff + View-Aggregation (data.py: get_run_summaries, get_run_detail via ResultsDB)
+
+## Gruppe DC — Run-Start
+- [x] T-D05 — DashboardRunner mit injizierbarer Command-Factory (runner.py: shell=False, Marker-Whitelist, Busy-Signal, Progress-Tracking)
+
+## Gruppe DD — FastAPI-App & Routen
+- [x] T-D06 — FastAPI-App-Factory + 6 JSON-Routen (app.py: create_app, alle Routen 200 + Schema)
+- [x] T-D07 — Run-Start-Flow & Sicherheit (409 bei Busy, 422 bei Bad-Marker, Default-Host 127.0.0.1)
+
+## Gruppe DE — CLI & Frontend
+- [x] T-D08 — CLI-Befehl `cpe-ta dashboard` (click, --host/--port/--results/--db, Port-Belegt-Exit ≠ 0)
+- [x] T-D09 — Vanilla-Frontend (index.html/app.css/app.js, 6 Views, kein CDN, offline)
+
+## Gruppe DF — Qualität, Offline-Gate, Doku
+- [x] T-D10 — Offline-/Sicherheits-Meta-Test + Backend-Coverage (≥80% dashboard, test_offline.py)
+- [x] T-D11 — Lint/Typen-Gate: ruff clean + mypy --strict clean für dashboard
+- [x] T-D12 — Gate-Integration + Doku-Update (make verify nimmt tests/dashboard/ mit; README + docs/architecture.md aktualisiert)
 
 ## Done-Gate Status
-**GRÜN — 559 Tests, ruff clean, mypy --strict clean, Coverage 90%, AC-22 (15 skipped)**
-Commit: (aktuell)
+**GRÜN — 620 Tests (559 Kern + 61 Dashboard), ruff clean, mypy --strict clean, Coverage 89%, AC-22 (15 skipped)**
+**Dashboard AC-23..AC-31: alle erfüllt**

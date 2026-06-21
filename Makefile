@@ -17,6 +17,7 @@ lint:
 # ---------------------------------------------------------------------------
 typecheck:
 	mypy --strict cpe_ta/core cpe_ta/hal/base.py 2>/dev/null || mypy --strict cpe_ta/core
+	mypy --strict cpe_ta/dashboard/data.py cpe_ta/dashboard/models.py
 
 # ---------------------------------------------------------------------------
 # test  (all tests, no coverage)

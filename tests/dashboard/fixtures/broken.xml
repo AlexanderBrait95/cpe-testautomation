@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<testsuites>
+  <testsuite name="broken">
+    <testcase classname="tests.lan.test_lan" name="test_good" time="0.1"/>
+    <testcase classname="tests.lan.test_lan" name="test_broken" time="broken_not_a_float">
+      <failure message="some failure">traceback here</failure>
+    </testcase>
+    <!-- Intentionally unclosed to test recovery: this is actually a valid partial doc -->
+  </testsuite>
+</testsuites>

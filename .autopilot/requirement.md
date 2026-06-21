@@ -250,3 +250,66 @@ OPEN, WEP64/128 (prüfen, ob Abnahme noch nötig oder nur „wird korrekt abgele
 - Auswahl & Steuerschnittstelle der Managed Switches / PDUs / Dämpfungsglieder (für Hardware-Treiber, §1).
 
 _Angelegt: 2026-06-20T23:05:43.459Z_
+
+---
+
+## 14. Web-Dashboard (P1 — neue Anforderung)
+
+Das Framework bekommt ein **Web-Dashboard** als eigenständige Komponente (`cpe_ta/dashboard/`).
+Ziel: Testergebnisse übersichtlich im Browser darstellen und Tests direkt aus dem Browser starten.
+
+### 14.1 Stack & Betrieb
+- **Backend:** FastAPI (Python), passt zur bestehenden `cpe_ta`-Codebasis.
+- **Frontend:** Vanilla HTML/CSS/JavaScript — kein Build-System, keine Node-Deps.
+- **Start:** `cpe-ta dashboard` startet den Server (CLI-Befehl analog zu bestehenden Commands).
+- **Port:** 8080 (konfigurierbar).
+- **Deployment:** Läuft lokal auf dem Control-Host, kein Internet-Zugriff nötig.
+
+### 14.2 Seiten / Views
+
+#### Overview (Startseite)
+- Gesamtstatistik: Anzahl Passed / Failed / Skipped / Error (aus letztem Run oder kumulativ).
+- Letzter Testlauf: Zeitstempel, Dauer, Git-Commit.
+- Schnellzugriff auf die wichtigsten Domains.
+
+#### Test-Domains
+- Balkendiagramm: pro Domain (LAN, WiFi, WAN, DHCP, Security, ACS, VoIP, Stress, etc.) Pass/Fail-Quote.
+- Klick auf Domain → gefilterte Testliste.
+
+#### Testläufe (Run History)
+- Tabelle aller Runs mit: Zeitstempel, Dauer, Passed/Failed/Skipped-Zähler, Git-Commit-Hash.
+- Klick auf Run → Detail-Ansicht des Runs.
+
+#### Testlauf-Detail
+- Liste aller Tests des Runs mit Status-Icon (✓/✗/○), Testname, Domain, Dauer.
+- Klick auf Test → Einzeltest-Detail.
+
+#### Einzeltest-Detail
+- Testname, Domain, Status, Dauer.
+- Fehler-Message und Stacktrace (falls failed).
+- Parametrisierungs-Info falls vorhanden.
+
+#### Testbed-Status
+- Zeigt das geladene Inventory (aus `testbed.yaml`): DUT-Name, HAL-Devices, konfigurierte Services.
+- Verbindungsstatus (simuliert/real) pro Device.
+
+#### Test-Run starten
+- Formular: Test-Selektion via Marker-Tags (z. B. `headless`, `smoke`, Domain-Filter).
+- „Run"-Button startet `pytest` als Subprocess im Hintergrund.
+- Live-Fortschrittsanzeige (SSE oder Polling) während der Run läuft.
+- Ergebnis wird nach Abschluss direkt in der History sichtbar.
+
+### 14.3 Datenbasis
+- Liest vorhandene `test-results.xml` (JUnit-Format) und die SQLite Results-DB (falls vorhanden).
+- Parsed JUnit-XML für sofortige Kompatibilität ohne DB-Migration.
+- Neue Runs werden automatisch in der DB gespeichert.
+
+### 14.4 Akzeptanzkriterien
+- `cpe-ta dashboard` startet ohne Fehler, Browser öffnet localhost:8080.
+- Alle 6 Views sind erreichbar und zeigen sinnvollen Inhalt (ggf. „Keine Daten" wenn leer).
+- Die vorhandene `test-results.xml` wird korrekt eingelesen und in der UI dargestellt.
+- Ein Test-Run kann über die UI gestartet werden und der Status ist live sichtbar.
+- Keine externen CDN-Abhängigkeiten (funktioniert offline).
+- Tests für das Backend (FastAPI-Routes) im headless Gate (`make verify`).
+
+_Erweitert: 2026-06-21 — Web-Dashboard Anforderung_

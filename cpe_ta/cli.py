@@ -224,5 +224,42 @@ def db_migrate_cmd(db_path: str) -> None:
     sys.exit(0)
 
 
+# ---------------------------------------------------------------------------
+# dashboard
+# ---------------------------------------------------------------------------
+
+
+@app.command("dashboard")
+@click.option("--host", default="127.0.0.1", show_default=True, help="Bind host (default: loopback)")
+@click.option("--port", default=8080, show_default=True, help="Bind port")
+@click.option("--results", "results_path", default="test-results.xml", show_default=True, help="JUnit XML results file")
+@click.option("--db", "db_path", default=None, help="SQLite results database (optional)")
+@click.option("--testbed", "testbed_path", default=None, help="Testbed YAML file (optional)")
+def dashboard_cmd(host: str, port: int, results_path: str, db_path: str | None, testbed_path: str | None) -> None:
+    """Start the CPE Test-Automation Web-Dashboard."""
+    import socket
+
+    try:
+        import uvicorn  # noqa: PLC0415
+
+        from cpe_ta.dashboard.app import create_app  # noqa: PLC0415
+    except ImportError as exc:
+        click.echo(f"ERROR: Dashboard dependencies not installed — {exc}", err=True)
+        sys.exit(1)
+
+    # Probe port availability before starting uvicorn (avoids silent hang)
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind((host, port))
+        except OSError:
+            click.echo(f"ERROR: Port {port} is already in use on {host}. Choose a different port.", err=True)
+            sys.exit(1)
+
+    dashboard_app = create_app(results_path=results_path, db_path=db_path, testbed_path=testbed_path)
+    click.echo(f"Dashboard running at http://{host}:{port}/ — press Ctrl+C to stop")
+    uvicorn.run(dashboard_app, host=host, port=port)
+
+
 if __name__ == "__main__":
     app()

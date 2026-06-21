@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<testsuites>
+  <testsuite name="mini" tests="4" failures="1" errors="0" skipped="1">
+    <testcase classname="tests.lan.test_lan" name="test_autoneg" time="0.05"/>
+    <testcase classname="tests.lan.test_lan" name="test_link_flap" time="0.03"/>
+    <testcase classname="tests.wifi.test_wifi" name="test_wpa2" time="0.07">
+      <failure message="AssertionError">Traceback...</failure>
+    </testcase>
+    <testcase classname="tests.wifi.test_wifi" name="test_wpa3" time="0.02">
+      <skipped message="skip reason"/>
+    </testcase>
+  </testsuite>
+</testsuites>

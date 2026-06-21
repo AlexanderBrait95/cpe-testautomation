@@ -121,3 +121,48 @@ For a complete field-by-field explanation, see [testbed.md](testbed.md).
 ## Performance Criteria Profiles
 
 Performance thresholds (e.g., minimum throughput, maximum latency) are defined in YAML profiles under `profiles/`. The engine loads these at test time and calls `evaluate_result()` to determine pass/fail. Profiles reference RFC 2544 and RFC 6349 methodology. See [criteria.md](criteria.md) for details.
+
+## Web-Dashboard (§14)
+
+The dashboard is a self-contained component under `cpe_ta/dashboard/` with a FastAPI JSON-API backend and a vanilla HTML/CSS/JS frontend.
+
+### Starting the Dashboard
+
+```bash
+# Default: loopback only, port 8080
+cpe-ta dashboard
+
+# Custom
+cpe-ta dashboard --host 127.0.0.1 --port 9090 --results test-results.xml --db cpe_ta_results.db
+```
+
+### Views (6 hash-routed)
+
+| Route | API | Content |
+|---|---|---|
+| `/` | `GET /api/overview` | Passed/Failed/Skipped/Error totals, last run, domain quick-access |
+| `#/domains` | `GET /api/domains` | Per-domain pass/fail bar chart |
+| `#/runs` | `GET /api/runs` | Run history table |
+| `#/runs/{id}` | `GET /api/runs/{id}` | All tests of a run with status icons, stacktraces |
+| `#/testbed` | `GET /api/testbed` | DUT, HAL devices, services from testbed.yaml |
+| `#/start` | `POST /api/runs` | Start pytest via marker expression, live progress polling |
+
+### Architecture
+
+- `dashboard/app.py` — `create_app(results_path, db_path, runner, testbed_path) → FastAPI`
+- `dashboard/data.py` — pure functions: JUnit-XML parser, DB reader, aggregation
+- `dashboard/models.py` — Pydantic v2 response models (mypy --strict clean)
+- `dashboard/runner.py` — `DashboardRunner` with injectable command-factory (`shell=False`)
+- `dashboard/static/` — `index.html`, `app.css`, `app.js` (no CDN, offline)
+
+### Security Properties
+
+- Default bind: `127.0.0.1` (loopback only)
+- Marker whitelist: `^[a-zA-Z0-9_ ()-andort]+$` — no shell metacharacters
+- Subprocess: argument list (`shell=False`), never a shell string
+- No secrets in API responses
+
+### Testing
+
+All 61 dashboard tests run headless via `pytest -m "not hardware"` (TestClient, no live server).
+Backend coverage ≥ 80% (measured in `make verify`).
