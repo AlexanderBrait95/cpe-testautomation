@@ -132,3 +132,14 @@ class HelpContent(BaseModel):
 class InventoryValidateResult(BaseModel):
     ok: bool
     errors: list[str]
+
+
+class CancelRequest(BaseModel):
+    """Request body for POST /api/runs/active/cancel.
+
+    The non-empty JSON body forces Content-Type: application/json,
+    which triggers a CORS preflight from cross-origin pages — preventing
+    simple-request CSRF (no auth layer by design, loopback-single-user).
+    """
+
+    confirm: bool = True

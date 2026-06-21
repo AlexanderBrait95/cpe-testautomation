@@ -151,3 +151,64 @@ def test_validate_response_no_raw_content(tmp_path):
     body = r.json()
     assert "ok" in body
     assert "errors" in body
+
+
+# ---------------------------------------------------------------------------
+# TV-02: YAML-Snippet-Leak prevention — tab-indent line must not leak (redteam #1)
+# ---------------------------------------------------------------------------
+
+
+def test_validate_yaml_tab_indent_no_snippet_leak(tmp_path):
+    """A YAML scanner error caused by a tab indent must not leak the faulty line."""
+    secret_token = "TABSECRET_xyz987"
+    # YAML does not allow tabs for indentation → scanner error with line context
+    yaml_content = f"id: test\nwiring_map:\n\t{secret_token}: value\n"
+    p = tmp_path / "tab_secret.yaml"
+    p.write_text(yaml_content, encoding="utf-8")
+    app = create_app()
+    client = TestClient(app)
+    r = client.post(f"/api/inventory/validate?path={p}")
+    assert r.status_code == 200, "Must return 200 even on YAML scanner error"
+    body_text = r.text
+    assert secret_token not in body_text, (
+        f"TV-02: YAML snippet leaked in response — secret token found: {body_text[:300]}"
+    )
+    body = r.json()
+    assert body["ok"] is False
+    assert len(body["errors"]) >= 1
+
+
+def test_validate_oracle_neutral_not_found_vs_parse_fail(tmp_path):
+    """TV-02: not-found and parse-fail must return the same neutral error text (no oracle)."""
+    app = create_app()
+    client = TestClient(app)
+
+    # not-found
+    r_nf = client.post("/api/inventory/validate?path=definitely_not_here_xyz.yaml")
+    assert r_nf.status_code == 200
+    body_nf = r_nf.json()
+    assert body_nf["ok"] is False
+
+    # parse-fail (broken YAML in tmp)
+    broken = tmp_path / "broken_oracle.yaml"
+    broken.write_text("id: test\nwiring_map:\n\tBAD_INDENT_SECRET\n", encoding="utf-8")
+    r_pf = client.post(f"/api/inventory/validate?path={broken}")
+    assert r_pf.status_code == 200
+    body_pf = r_pf.json()
+    assert body_pf["ok"] is False
+
+    # both must return the same error message (no oracle to distinguish)
+    assert body_nf["errors"] == body_pf["errors"], (
+        f"TV-02: existence oracle — not-found={body_nf['errors']} vs "
+        f"parse-fail={body_pf['errors']}"
+    )
+
+
+def test_validate_yaml_error_no_500(tmp_path):
+    """TV-02: YAML scanner/parser errors must return 200, not 500."""
+    p = tmp_path / "bad_yaml.yaml"
+    p.write_text("key:\n\ttab_is_invalid: true\n", encoding="utf-8")
+    app = create_app()
+    client = TestClient(app)
+    r = client.post(f"/api/inventory/validate?path={p}")
+    assert r.status_code == 200, f"Expected 200, got {r.status_code}"

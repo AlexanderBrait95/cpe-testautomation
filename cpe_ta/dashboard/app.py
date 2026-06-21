@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from cpe_ta.dashboard import data as _data
 from cpe_ta.dashboard.help import get_help_content
 from cpe_ta.dashboard.models import (
+    CancelRequest,
     DomainStat,
     HelpContent,
     InventoryValidateResult,
@@ -38,13 +39,18 @@ _INPUT_VALUE_TAIL_RE = re.compile(r",\s*input_value=[^\]]+(?=\])")
 _FOR_FURTHER_RE = re.compile(r"\n?For further information.*$", re.DOTALL)
 _SAFE_FILENAME_RE = re.compile(r"[^a-zA-Z0-9\-_]")
 
+_NEUTRAL_CONFIG_ERROR = "Configuration file could not be loaded"
+
 
 def _sanitize_config_error(msg: str) -> str:
-    """Strip Pydantic input_value/type leakage to prevent secret disclosure."""
+    """Strip Pydantic input_value/type and YAML snippet leakage."""
+    # YAML parse errors include the faulty line content — replace entirely
+    if "YAML parse error" in msg or msg.lstrip().startswith("while "):
+        return _NEUTRAL_CONFIG_ERROR
     msg = _INPUT_VALUE_RE.sub("", msg)
     msg = _INPUT_VALUE_TAIL_RE.sub("", msg)
     msg = _FOR_FURTHER_RE.sub("", msg)
-    return msg.strip()
+    return msg.strip() or _NEUTRAL_CONFIG_ERROR
 
 
 def _safe_filename(s: str) -> str:
@@ -144,7 +150,10 @@ def create_app(
         return _runner.progress()
 
     @app.post("/api/runs/active/cancel")
-    def api_cancel_run() -> dict[str, str]:
+    def api_cancel_run(body: CancelRequest) -> dict[str, str]:
+        # body requirement enforces Content-Type: application/json →
+        # cross-origin simple-request CSRF not possible (preflight required)
+        _ = body
         cancelled = _runner.cancel()
         if not cancelled:
             raise HTTPException(status_code=409, detail="No active run to cancel")
@@ -211,7 +220,7 @@ def create_app(
             raise HTTPException(status_code=400, detail="Path not allowed")
 
         if not p.exists():
-            return InventoryValidateResult(ok=False, errors=["File not found"])
+            return InventoryValidateResult(ok=False, errors=[_NEUTRAL_CONFIG_ERROR])
         try:
             tb = load_testbed(str(p))
         except ConfigError as exc:
@@ -219,7 +228,7 @@ def create_app(
                 ok=False, errors=[_sanitize_config_error(str(exc))]
             )
         except Exception:  # noqa: BLE001
-            return InventoryValidateResult(ok=False, errors=["Validation error"])
+            return InventoryValidateResult(ok=False, errors=[_NEUTRAL_CONFIG_ERROR])
         wiring_errors = validate_wiring_map(tb.wiring_map)
         if wiring_errors:
             return InventoryValidateResult(ok=False, errors=wiring_errors)
@@ -241,6 +250,8 @@ def create_app(
             run_id = _runner.start(req.markers)
         except RuntimeError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except OSError as exc:
+            raise HTTPException(status_code=422, detail="Failed to start test process") from exc
 
         return {"run_id": run_id, "status": "running"}
 

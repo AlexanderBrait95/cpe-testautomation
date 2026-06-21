@@ -157,3 +157,126 @@ def test_runner_tail_still_correct_after_overflow():
     if prog.lines_tail:
         # The last line in the tail must be the very last line written
         assert prog.lines_tail[-1] == f"line-{n_lines - 1}"
+
+
+# ---------------------------------------------------------------------------
+# TV-05: validate_marker — trailing newline must be rejected (\A...\Z regex)
+# ---------------------------------------------------------------------------
+
+
+def test_trailing_newline_marker_rejected():
+    """TV-05: 'smoke\\n' must be rejected — $ matches before \\n, \\Z does not."""
+    with pytest.raises(ValueError):
+        validate_marker("smoke\n")
+
+
+def test_trailing_newline_multiline_still_rejected():
+    """Multiline payload with newline must be rejected."""
+    with pytest.raises(ValueError):
+        validate_marker("smoke\ninjected")
+
+
+# ---------------------------------------------------------------------------
+# TV-04: validate_marker — whitespace-only markers rejected
+# ---------------------------------------------------------------------------
+
+
+def test_whitespace_only_marker_rejected():
+    """TV-04: '   ' (whitespace-only) must be rejected, not start the full suite."""
+    with pytest.raises(ValueError):
+        validate_marker("   ")
+
+
+def test_empty_marker_rejected():
+    """TV-04: empty string must be rejected."""
+    with pytest.raises(ValueError):
+        validate_marker("")
+
+
+# ---------------------------------------------------------------------------
+# TV-03: Cancel/Start race — epoch guard prevents old monitor overwrite
+# ---------------------------------------------------------------------------
+
+
+def test_cancel_start_race_new_run_stays_running():
+    """TV-03: cancel() immediately followed by start() must leave new run running."""
+    def blocking_factory(markers: str, xml_path: str) -> list[str]:
+        # Blocks until cancel_event is set, then exits
+        return [
+            sys.executable,
+            "-c",
+            "import time; time.sleep(5)",
+        ]
+
+    runner = DashboardRunner(command_factory=blocking_factory)
+
+    # Start first run (slow)
+    runner.start("smoke")
+    assert runner.progress().status == "running"
+
+    # Cancel immediately, then start a new quick run
+    runner.cancel()
+
+    xml_holder: list[str] = []
+
+    def quick_factory(markers: str, xml_path: str) -> list[str]:
+        xml_holder.append(xml_path)
+        return [sys.executable, "-c", f"open(r'{xml_path}', 'w').write('<testsuites/>')"]
+
+    runner._factory = quick_factory
+    runner.start("headless")
+
+    # The NEW run must be running (not overwritten by old monitor's finalize)
+    assert runner.progress().status == "running", (
+        "TV-03: old monitor overwrote new run status immediately after cancel+start"
+    )
+
+    # Wait for new run to finish
+    for _ in range(50):
+        if runner.progress().status != "running":
+            break
+        time.sleep(0.1)
+
+    final_status = runner.progress().status
+    assert final_status in ("finished", "failed"), (
+        f"TV-03: new run did not complete cleanly, status={final_status}"
+    )
+
+
+def test_old_monitor_does_not_write_to_new_deque():
+    """TV-03: old monitor must not append lines to the new run's deque."""
+    def slow_output_factory(markers: str, xml_path: str) -> list[str]:
+        # Writes many lines slowly so monitor keeps running after cancel
+        return [
+            sys.executable,
+            "-c",
+            (
+                "import sys, time\n"
+                "for i in range(20):\n"
+                "    print(f'old-line-{i}', flush=True)\n"
+                "    time.sleep(0.05)\n"
+            ),
+        ]
+
+    runner = DashboardRunner(command_factory=slow_output_factory)
+    runner.start("smoke")
+    time.sleep(0.05)  # let old monitor start reading
+
+    # Cancel and immediately start a new idle run
+    runner.cancel()
+
+    new_lines_before: list[str] = []
+
+    def instant_factory(markers: str, xml_path: str) -> list[str]:
+        new_lines_before.extend(list(runner._lines))  # snapshot new deque contents
+        return [sys.executable, "-c", f"open(r'{xml_path}', 'w').write('<testsuites/>')"]
+
+    runner._factory = instant_factory
+    runner.start("headless")
+    time.sleep(0.3)  # allow old monitor to finish (max 20*50ms = 1s)
+
+    new_deque_contents = list(runner._lines)
+    stale = [line for line in new_deque_contents if line.startswith("old-line-")]
+    assert not stale, (
+        f"TV-03: old monitor wrote {len(stale)} stale lines into new deque: {stale[:5]}"
+    )

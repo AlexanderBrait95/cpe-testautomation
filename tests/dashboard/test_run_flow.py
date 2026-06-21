@@ -157,8 +157,8 @@ def test_cancel_active_run_returns_cancelled():
     time.sleep(0.1)
     assert runner.progress().status == "running"
 
-    # Cancel it
-    r_cancel = client.post("/api/runs/active/cancel")
+    # Cancel it (JSON body required — triggers CORS preflight from cross-origin requests)
+    r_cancel = client.post("/api/runs/active/cancel", json={})
     assert r_cancel.status_code == 200
     assert r_cancel.json()["status"] == "cancelled"
 
@@ -170,7 +170,7 @@ def test_cancel_no_active_run_returns_409():
     runner = DashboardRunner()  # idle
     app = create_app(results_path=MINI_XML, runner=runner)
     client = TestClient(app)
-    r = client.post("/api/runs/active/cancel")
+    r = client.post("/api/runs/active/cancel", json={})
     assert r.status_code == 409
 
 
@@ -180,8 +180,68 @@ def test_cancel_does_not_leave_zombie():
     client = TestClient(app)
     client.post("/api/runs", json={"markers": "headless"})
     time.sleep(0.1)
-    client.post("/api/runs/active/cancel")
+    client.post("/api/runs/active/cancel", json={})
     time.sleep(0.2)
     # Process should be gone — poll returns non-running status
     status = runner.progress().status
     assert status in ("cancelled", "idle"), f"Unexpected status: {status}"
+
+
+# ---------------------------------------------------------------------------
+# TV-04: CSRF — cancel without JSON body must be rejected (no simple-request CSRF)
+# ---------------------------------------------------------------------------
+
+
+def test_cancel_without_body_rejected():
+    """TV-04: cancel without a JSON body must not succeed — non-simple request enforced."""
+    runner = DashboardRunner()
+    app = create_app(results_path=MINI_XML, runner=runner)
+    client = TestClient(app)
+    # No body, no Content-Type: application/json → FastAPI rejects with 422
+    r = client.post("/api/runs/active/cancel", content=b"")
+    assert r.status_code == 422, (
+        f"TV-04: cancel without JSON body must return 422, got {r.status_code}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# TV-04: Whitespace-only marker via API → 422 (no full suite started)
+# ---------------------------------------------------------------------------
+
+
+def test_whitespace_marker_via_api_rejected():
+    """TV-04: markers='   ' must return 422 and not start any subprocess."""
+    called: list[bool] = []
+
+    def factory(markers: str, xml_path: str) -> list[str]:
+        called.append(True)
+        return [sys.executable, "-c", "pass"]
+
+    runner = DashboardRunner(command_factory=factory)
+    app = create_app(results_path=MINI_XML, runner=runner)
+    client = TestClient(app)
+    r = client.post("/api/runs", json={"markers": "   "})
+    assert r.status_code in (400, 422), (
+        f"TV-04: whitespace-only marker must return 4xx, got {r.status_code}"
+    )
+    assert called == [], "TV-04: subprocess must not be started for whitespace-only markers"
+
+
+# ---------------------------------------------------------------------------
+# TV-04: OSError on Popen → 422 (not 500)
+# ---------------------------------------------------------------------------
+
+
+def test_oserror_in_popen_returns_422():
+    """TV-04: if Popen raises OSError (e.g. oversized marker), response must be 422, not 500."""
+
+    def oserror_factory(markers: str, xml_path: str) -> list[str]:
+        raise OSError("Argument list too long")
+
+    runner = DashboardRunner(command_factory=oserror_factory)
+    app = create_app(results_path=MINI_XML, runner=runner)
+    client = TestClient(app)
+    r = client.post("/api/runs", json={"markers": "smoke"})
+    assert r.status_code == 422, (
+        f"TV-04: OSError must return 422, not 500 — got {r.status_code}"
+    )

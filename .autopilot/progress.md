@@ -139,7 +139,20 @@
 - [x] TG-01 — ruff clean, mypy --strict clean (data.py, models.py, help.py, runner.py), Dashboard-Coverage ≥ 80 %
 - [x] TG-02 — `make verify` EXIT 0: **710 passed (689+21 neue), 0 failed**, Coverage 91%, AC-22 (15 skipped), AC-01..AC-44 regressionsfrei
 
+## Gruppe Verify-Reparatur Iteration 2 (§16.4 + redteam-Härtung)
+
+### TV — Verify-Lücken
+- [x] TV-01 — AC-51: Frontend-Onboarding driftfrei (verbotene Phrasen entfernt, Skeleton-Warnung + architecture.md-Verweis in app.js)
+- [x] TV-02 — YAML-Snippet-Leak geschlossen (`_sanitize_config_error` erkennt YAML-Fehler, neutraler Fehlertext, Existenz-Oracle eliminiert)
+- [x] TV-03 — Cancel/Start-Race: Epoch-Guard in `_monitor` (schreibt nur, wenn `_epoch == my_epoch`; kein Zombie-Überschreiben)
+- [x] TV-04 — CSRF-Härtung Cancel (`CancelRequest`-Body erzwingt Content-Type JSON); OSError → 422 statt 500; Whitespace-Marker → 422
+- [x] TV-05 — Marker-Regex `\A...\Z`: `smoke\n` abgelehnt; legitime Marker weiterhin akzeptiert
+
+### TG — Gate-Konformität
+- [x] TG-01 — ruff clean, mypy --strict clean (data.py, models.py), Dashboard-Coverage ≥ 80 %
+- [x] TG-02 — `make verify` EXIT 0: **726 passed (710+16 neue), 0 failed**, Coverage 91%, AC-22 (15 skipped), AC-01..AC-50 regressionsfrei, AC-51 erstmals grün
+
 ## Done-Gate Status
-**GRÜN — 710 Tests, ruff clean, mypy --strict clean, Coverage 91%, AC-22 (15 skipped)**
-**AC-45..AC-50 (§16): alle erfüllt**
-**Iteration 8 (§16 Nachschärfung): Gate grün — 710 passed 0 failed**
+**GRÜN — 726 Tests, ruff clean, mypy --strict clean, Coverage 91%, AC-22 (15 skipped)**
+**AC-45..AC-51 (§16/§16.4): alle erfüllt**
+**Iteration 9 (Verify-Reparatur Iteration 2): Gate grün — 726 passed 0 failed**

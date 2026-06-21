@@ -15,7 +15,8 @@ from typing import Any
 from cpe_ta.dashboard.models import RunProgress
 
 # Whitelist for marker expressions — no shell metacharacters allowed.
-_MARKER_RE = re.compile(r"^[a-zA-Z0-9_ ()\-andort]+$")
+# \A/\Z anchors prevent trailing-newline bypass that ^ / $ allows before \n.
+_MARKER_RE = re.compile(r"\A[a-zA-Z0-9_ ()\-andort]+\Z")
 
 _MAX_OUTPUT_LINES = 1000
 
@@ -27,7 +28,9 @@ def _default_command_factory(markers: str, output_xml: str) -> list[str]:
 
 
 def validate_marker(markers: str) -> None:
-    """Raise ValueError when markers contain disallowed characters."""
+    """Raise ValueError when markers are empty, whitespace-only, or contain disallowed characters."""
+    if not markers.strip():
+        raise ValueError("Marker expression must not be empty or whitespace-only")
     if not _MARKER_RE.match(markers):
         raise ValueError(f"Invalid marker expression: {markers!r}")
 
@@ -47,6 +50,7 @@ class DashboardRunner:
         self._status: str = "idle"
         self._counts: dict[str, int] = {}
         self._thread: threading.Thread | None = None
+        self._epoch: int = 0  # monotonically incremented on each start()
 
     # ------------------------------------------------------------------
     # Public API
@@ -77,7 +81,9 @@ class DashboardRunner:
             self._lines = deque(maxlen=_MAX_OUTPUT_LINES)
             self._status = "running"
             self._counts = {}
-            t = threading.Thread(target=self._monitor, daemon=True)
+            self._epoch += 1
+            my_epoch = self._epoch
+            t = threading.Thread(target=self._monitor, args=(my_epoch,), daemon=True)
             self._thread = t
             t.start()
         return self._run_id
@@ -124,7 +130,7 @@ class DashboardRunner:
     # Internal
     # ------------------------------------------------------------------
 
-    def _monitor(self) -> None:
+    def _monitor(self, my_epoch: int) -> None:
         proc = self._process
         if proc is None:
             return
@@ -132,13 +138,13 @@ class DashboardRunner:
         for line in proc.stdout:
             line = line.rstrip()
             with self._lock:
-                if self._status == "cancelled":
+                if self._epoch != my_epoch or self._status == "cancelled":
                     break
                 self._lines.append(line)
                 self._update_counts(line)
         proc.wait()
         with self._lock:
-            if self._status != "cancelled":
+            if self._epoch == my_epoch and self._status != "cancelled":
                 self._status = "finished" if proc.returncode == 0 else "failed"
 
     def _update_counts(self, line: str) -> None:

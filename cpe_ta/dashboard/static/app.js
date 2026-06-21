@@ -604,13 +604,22 @@ async function viewHelp() {
 
       <div class="card">
         <h2>Switching from Simulator to Real Hardware</h2>
+        <p style="color:#f87171;font-size:.85rem;margin-bottom:.75rem">
+          <strong>⚠ All real hardware drivers and infrastructure adapters are currently skeletons
+          (raise <code>NotImplementedError</code>).</strong>
+          Real-hardware testing is not yet functional. Each driver must be implemented first —
+          see <code>docs/architecture.md</code> for the full driver map.
+        </p>
         <ol style="color:#cbd5e1;line-height:1.8">
+          <li>Implement the required real driver(s) in <code>cpe_ta/hal/</code> and/or
+              <code>cpe_ta/infra/</code> — consult <code>docs/architecture.md</code>.</li>
           <li>Copy <code>testbed.example.yaml</code> to <code>testbed.yaml</code> and fill in real IPs/credentials.</li>
           <li>Set the environment variable <code>USE_SIM=0</code> before running tests.</li>
-          <li>Run <code>cpe-ta inventory-validate testbed.yaml</code> to check the configuration.</li>
-          <li>Execute: <code>cpe-ta run -m "regression"</code> — tests now target real hardware.</li>
-          <li>Hardware-deferred tests (RF, physical fiber, real CMTS) require the matching physical equipment.</li>
+          <li>Run <code>cpe-ta inventory-validate testbed.yaml</code> to verify the configuration.</li>
+          <li>Execute: <code>cpe-ta run -m "regression"</code> — only drivers with a real implementation will work.</li>
+          <li>Hardware-deferred tests (RF, physical fiber, real CMTS, etc.) additionally require matching physical equipment.</li>
         </ol>
+        <p>The badge column above shows each driver's current status (<em>skeleton</em> / <em>partial</em> / <em>implemented</em>).</p>
         <p><a class="link" href="#/testbed" title="Open testbed status and inventory validator">→ Open Testbed View &amp; Inventory Validator</a></p>
       </div>`;
   } catch (e) {

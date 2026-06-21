@@ -188,3 +188,47 @@ def test_offline_invariant_real_status_no_cdn(tmp_path):
     external = _re.findall(r'https?://[^\s\'">`]+', combined)
     assert not external, \
         f"External URLs found in static assets (AC-29 violation): {external[:5]}"
+
+
+# ---------------------------------------------------------------------------
+# AC-51: Real-HW onboarding card — no false success claims (TV-01)
+# ---------------------------------------------------------------------------
+
+_FORBIDDEN_PHRASES = [
+    "tests now target real hardware",
+    "the same tests execute against physical hardware",
+]
+
+
+def test_js_no_false_real_hw_success_phrases():
+    """AC-51: forbidden success phrases must not appear in app.js."""
+    text = _js_text()
+    for phrase in _FORBIDDEN_PHRASES:
+        assert phrase not in text, (
+            f"AC-51 violation: forbidden phrase found in app.js: {phrase!r}"
+        )
+
+
+def test_index_no_false_real_hw_success_phrases():
+    """AC-51: forbidden success phrases must not appear in index.html."""
+    text = _index_text()
+    for phrase in _FORBIDDEN_PHRASES:
+        assert phrase not in text, (
+            f"AC-51 violation: forbidden phrase found in index.html: {phrase!r}"
+        )
+
+
+def test_js_real_hw_card_has_skeleton_warning():
+    """AC-51: 'Switching from Simulator' card must warn that drivers are skeletons."""
+    text = _js_text()
+    assert "skeleton" in text, \
+        "AC-51: app.js must mention 'skeleton' status in the real-HW onboarding card"
+    assert "NotImplementedError" in text or "not yet functional" in text or "must be implemented" in text.lower(), \
+        "AC-51: app.js must indicate real drivers are not yet functional / must be implemented"
+
+
+def test_js_real_hw_card_references_architecture_doc():
+    """AC-51: the card must reference docs/architecture.md for driver details."""
+    text = _js_text()
+    assert "architecture.md" in text, \
+        "AC-51: app.js must reference docs/architecture.md in the real-HW onboarding card"
